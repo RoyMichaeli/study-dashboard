@@ -1,18 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   signInWithPopup, 
   GoogleAuthProvider,
   signInAnonymously,
   signOut 
 } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { auth, isFirebaseConfigured } from '../config/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { User, LogOut, Cloud, Wifi, WifiOff } from 'lucide-react';
 
 export const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, loading, error] = useAuthState(auth);
+  const [localUser, setLocalUser] = useState<any>(null);
+  const [user, loading, error] = isFirebaseConfigured ? useAuthState(auth!) : [null, false, null];
 
   const signInWithGoogle = async () => {
+    if (!isFirebaseConfigured || !auth) {
+      alert('Firebase לא מוגדר. נכנס במצב מקומי.');
+      setLocalUser({ displayName: 'משתמש מקומי', isAnonymous: false });
+      return;
+    }
+    
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     
@@ -20,22 +27,39 @@ export const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children 
       await signInWithPopup(auth, provider);
     } catch (error) {
       console.error('Login failed:', error);
+      // Fallback to local mode
+      setLocalUser({ displayName: 'משתמש מקומי', isAnonymous: false });
     }
   };
 
   const signInAsGuest = async () => {
+    if (!isFirebaseConfigured || !auth) {
+      // Local guest mode - just proceed without Firebase
+      setLocalUser({ displayName: 'אורח', isAnonymous: true });
+      return;
+    }
+    
     try {
       await signInAnonymously(auth);
     } catch (error) {
       console.error('Anonymous login failed:', error);
+      // Fallback to local guest mode
+      setLocalUser({ displayName: 'אורח מקומי', isAnonymous: true });
     }
   };
 
   const handleSignOut = async () => {
+    if (!isFirebaseConfigured || !auth) {
+      setLocalUser(null);
+      return;
+    }
+    
     try {
       await signOut(auth);
+      setLocalUser(null);
     } catch (error) {
       console.error('Sign out failed:', error);
+      setLocalUser(null);
     }
   };
 
@@ -66,7 +90,10 @@ export const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   }
 
-  if (!user) {
+  // Use Firebase user if available, otherwise local user
+  const currentUser = user || localUser;
+  
+  if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="bg-white p-8 rounded-xl shadow-lg max-w-md w-full mx-4">
@@ -137,10 +164,11 @@ export const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children 
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">
-                {user.displayName || user.email || 'אורח'}
+                {currentUser.displayName || currentUser.email || 'אורח'}
               </p>
               <p className="text-xs text-gray-500">
-                {user.isAnonymous ? 'משתמש אורח' : 'מחובר לענן'}
+                {!isFirebaseConfigured ? 'מצב מקומי' : 
+                 currentUser.isAnonymous ? 'משתמש אורח' : 'מחובר לענן'}
               </p>
             </div>
           </div>

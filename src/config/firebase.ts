@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
+// Check if Firebase config is available
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,20 +15,28 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Check if Firebase is configured
+export const isFirebaseConfigured = !!(firebaseConfig.apiKey && firebaseConfig.projectId);
 
-// Initialize Firestore with offline persistence
-export const db = getFirestore(app);
-export const auth = getAuth(app);
+// Initialize Firebase only if configured
+let app: any = null;
+if (isFirebaseConfigured) {
+  app = initializeApp(firebaseConfig);
+}
 
-// Enable offline persistence - חשוב מאוד!
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Multiple tabs open, persistence enabled in first tab only');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Browser doesn\'t support persistence');
-  }
-});
+// Initialize Firestore and Auth only if Firebase is configured
+export const db = isFirebaseConfigured ? getFirestore(app) : null;
+export const auth = isFirebaseConfigured ? getAuth(app) : null;
+
+// Enable offline persistence only if Firebase is configured
+if (isFirebaseConfigured && db) {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn('Multiple tabs open, persistence enabled in first tab only');
+    } else if (err.code === 'unimplemented') {
+      console.warn('Browser doesn\'t support persistence');
+    }
+  });
+}
 
 export { app };

@@ -1,6 +1,7 @@
 import React from 'react';
-import { Cloud, CloudOff, RefreshCw, CheckCircle, AlertTriangle, WifiOff } from 'lucide-react';
+import { Cloud, CloudOff, RefreshCw, CheckCircle, AlertTriangle, WifiOff, HardDrive } from 'lucide-react';
 import type { SyncState } from '../types';
+import { isFirebaseConfigured } from '../config/firebase';
 
 interface SyncIndicatorProps {
   syncState: SyncState;
@@ -12,6 +13,14 @@ export const SyncIndicator: React.FC<SyncIndicatorProps> = ({ syncState, user })
 
   return (
     <div className="fixed top-4 left-4 z-50 flex flex-col gap-2">
+      {/* Local Mode Indicator */}
+      {!isFirebaseConfigured && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-100 border border-blue-200 
+                      text-blue-800 rounded-lg shadow-sm text-sm">
+          <HardDrive className="w-4 h-4" />
+          <span>מצב מקומי - הכל נשמר במכשיר</span>
+        </div>
+      )}
       {/* Offline Status */}
       {isOffline && (
         <div className="flex items-center gap-2 px-3 py-2 bg-yellow-100 border border-yellow-200 

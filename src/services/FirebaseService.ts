@@ -2,10 +2,7 @@ import {
   collection, 
   doc, 
   setDoc, 
-  getDoc, 
   getDocs,
-  updateDoc,
-  deleteDoc,
   onSnapshot,
   serverTimestamp,
   writeBatch,
@@ -14,7 +11,7 @@ import {
   orderBy,
   Timestamp
 } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { db, auth, isFirebaseConfigured } from '../config/firebase';
 import type { Course, StudySession } from '../types';
 
 export class FirebaseService {
@@ -22,18 +19,21 @@ export class FirebaseService {
   private unsubscribers: (() => void)[] = [];
 
   constructor() {
-    // Listen to auth state changes
-    auth.onAuthStateChanged((user) => {
-      this.userId = user?.uid || null;
-    });
+    // Listen to auth state changes only if Firebase is configured
+    if (isFirebaseConfigured && auth) {
+      auth.onAuthStateChanged((user) => {
+        this.userId = user?.uid || null;
+      });
+    }
   }
 
   // ========== COURSES METHODS ==========
   
   async saveCourse(course: Course): Promise<void> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
-    const courseRef = doc(db, `users/${this.userId}/courses`, course.id.toString());
+    const courseRef = doc(db!, `users/${this.userId}/courses`, course.id.toString());
     
     // שמירה עם timestamp אוטומטי
     await setDoc(courseRef, {
@@ -43,13 +43,14 @@ export class FirebaseService {
   }
 
   async saveAllCourses(courses: Course[]): Promise<void> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
     // Batch write לביצועים טובים יותר
     const batch = writeBatch(db);
     
     courses.forEach(course => {
-      const courseRef = doc(db, `users/${this.userId}/courses`, course.id.toString());
+      const courseRef = doc(db!, `users/${this.userId}/courses`, course.id.toString());
       batch.set(courseRef, {
         ...course,
         updatedAt: serverTimestamp()
@@ -60,9 +61,10 @@ export class FirebaseService {
   }
 
   async getCourses(): Promise<Course[]> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
-    const coursesRef = collection(db, `users/${this.userId}/courses`);
+    const coursesRef = collection(db!, `users/${this.userId}/courses`);
     const snapshot = await getDocs(coursesRef);
     
     return snapshot.docs.map(doc => ({
@@ -72,9 +74,10 @@ export class FirebaseService {
 
   // Real-time listener לסנכרון אוטומטי
   subscribeToCourses(callback: (courses: Course[]) => void): () => void {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
-    const coursesRef = collection(db, `users/${this.userId}/courses`);
+    const coursesRef = collection(db!, `users/${this.userId}/courses`);
     const q = query(coursesRef, orderBy('id'));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -91,9 +94,10 @@ export class FirebaseService {
   // ========== STUDY SESSIONS METHODS ==========
   
   async saveStudySession(session: StudySession): Promise<void> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
-    const sessionRef = doc(collection(db, `users/${this.userId}/studySessions`));
+    const sessionRef = doc(collection(db!, `users/${this.userId}/studySessions`));
     
     await setDoc(sessionRef, {
       ...session,
@@ -102,12 +106,13 @@ export class FirebaseService {
   }
 
   async getTodayStudySessions(): Promise<StudySession[]> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const sessionsRef = collection(db, `users/${this.userId}/studySessions`);
+    const sessionsRef = collection(db!, `users/${this.userId}/studySessions`);
     const q = query(
       sessionsRef,
       where('startTime', '>=', Timestamp.fromDate(today)),
@@ -119,9 +124,10 @@ export class FirebaseService {
   }
 
   async getAllStudySessions(): Promise<StudySession[]> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
-    const sessionsRef = collection(db, `users/${this.userId}/studySessions`);
+    const sessionsRef = collection(db!, `users/${this.userId}/studySessions`);
     const snapshot = await getDocs(sessionsRef);
     
     return snapshot.docs.map(doc => doc.data() as StudySession);
@@ -130,6 +136,7 @@ export class FirebaseService {
   // ========== SYNC & BACKUP METHODS ==========
   
   async performFullBackup(): Promise<string> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
     const courses = await this.getCourses();
@@ -146,7 +153,7 @@ export class FirebaseService {
     };
     
     // שמירת גיבוי ב-Firestore
-    const backupRef = doc(collection(db, `users/${this.userId}/backups`));
+    const backupRef = doc(collection(db!, `users/${this.userId}/backups`));
     await setDoc(backupRef, backup);
     
     return backupRef.id;
@@ -155,6 +162,7 @@ export class FirebaseService {
   // ========== MIGRATION FROM LOCALSTORAGE ==========
   
   async migrateFromLocalStorage(): Promise<void> {
+    if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
     // Migrate courses
@@ -174,10 +182,10 @@ export class FirebaseService {
     if (localSessions) {
       try {
         const sessions = JSON.parse(localSessions);
-        const batch = writeBatch(db);
+        const batch = writeBatch(db!);
         
         sessions.forEach((session: any) => {
-          const sessionRef = doc(collection(db, `users/${this.userId}/studySessions`));
+          const sessionRef = doc(collection(db!, `users/${this.userId}/studySessions`));
           batch.set(sessionRef, {
             ...session,
             timestamp: serverTimestamp()
