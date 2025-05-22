@@ -1,0 +1,1102 @@
+import { useState, useEffect } from 'react'
+import './index.css'
+
+// נתונים לדוגמה עם המבנה החדש
+const sampleCourses = [
+  {
+    id: 1,
+    קורס: "כימיה אורגנית 1",
+    שיעורים: [
+      {
+        שם: "שיעור אלקאנים א'",
+        מצגת: "אלקאנים חלק א'",
+        נושאים: [
+          {
+            כותרת: "מושגי יסוד וטרמינולוגיה",
+            מטרות: [
+              "הגדרת אלקאנים והנוסחה הכללית CₙH₂ₙ₊₂",
+              "הבנה שאלקאנים הם פחמימנים רוויים",
+              "הכרת המבנה הטטראדרלי סביב כל אטום פחמן"
+            ],
+            completedGoals: ["הגדרת אלקאנים והנוסחה הכללית CₙH₂ₙ₊₂"]
+          }
+        ]
+      },
+      {
+        שם: "שיעור אלקאנים ב'",
+        מצגת: "אלקאנים חלק ב'",
+        נושאים: [
+          {
+            כותרת: "נומנקלטורה של אלקאנים",
+            מטרות: [
+              "שמות 12 האלקאנים הראשונים ונוסחאותיהם",
+              "נוסחה כללית של קבוצת אלקיל: CₙH₂ₙ₊₁",
+              "הכרת קבוצות אלקיל נפוצות"
+            ],
+            completedGoals: []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 2,
+    קורס: "מבני נתונים ואלגוריתמים",
+    שיעורים: [
+      {
+        שם: "מערכים ורשימות",
+        מצגת: "מבני נתונים בסיסיים",
+        נושאים: [
+          {
+            כותרת: "מערכים",
+            מטרות: [
+              "הגדרת מערך",
+              "פעולות על מערכים",
+              "מורכבות זמן"
+            ],
+            completedGoals: ["הגדרת מערך"]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 3,
+    קורס: "כימיה פיזיקלית",
+    שיעורים: [
+      {
+        שם: "תרמודינמיקה א'",
+        מצגת: "החוקים הראשון והשני",
+        נושאים: [
+          {
+            כותרת: "החוק הראשון של התרמודינמיקה",
+            מטרות: [
+              "הגדרת אנרגיה פנימית ועבודה",
+              "משוואת החוק הראשון: ΔU = Q - W",
+              "יישומים על תהליכים: איזותרמי, איזוכורי, איזובארי",
+              "אנתלפיה ויחס לאנרגיה פנימית"
+            ],
+            completedGoals: []
+          },
+          {
+            כותרת: "החוק השני של התרמודינמיקה",
+            מטרות: [
+              "הגדרת אנטרופיה ותכונותיה",
+              "משוואת קלאוזיוס: dS ≥ δQ/T",
+              "אנרגיה חופשית גיבס והלמהולץ",
+              "שיווי משקל תרמודינמי"
+            ],
+            completedGoals: []
+          }
+        ]
+      },
+      {
+        שם: "קינטיקה כימית",
+        מצגת: "מהירות תגובה ומנגנונים",
+        נושאים: [
+          {
+            כותרת: "חוקי מהירות",
+            מטרות: [
+              "הגדרת מהירות תגובה וחוק המהירות",
+              "סדר תגובה וקבוע מהירות",
+              "תגובות מסדר ראשון ושני",
+              "זמן מחצית חיים"
+            ],
+            completedGoals: []
+          },
+          {
+            כותרת: "תיאוריה של מהירות תגובה",
+            מטרות: [
+              "תיאורית המצב המעבר",
+              "אנרגיית אקטיבציה ומשוואת ארהניוס",
+              "קטליזה וההשפעה על מנגנון התגובה",
+              "מנגנונים מורכבים ושלב קובע מהירות"
+            ],
+            completedGoals: []
+          }
+        ]
+      },
+      {
+        שם: "מכניקה קוונטית",
+        מצגת: "יסודות הקוונטים",
+        נושאים: [
+          {
+            כותרת: "רקע היסטורי ועקרונות בסיסיים",
+            מטרות: [
+              "קרינת הגוף השחור ופלאנק",
+              "אפקט פוטואלקטרי ואיינשטיין",
+              "מודל בוהר לאטום המימן",
+              "דואליות גל-חלקיק ודה ברולי"
+            ],
+            completedGoals: []
+          }
+        ]
+      }
+    ]
+  },
+  {
+    id: 4,
+    קורס: "פיזיקה מכינה ב'",
+    שיעורים: [
+      {
+        שם: "חשמל סטטי",
+        מצגת: "מטענים וכוחות חשמליים",
+        נושאים: [
+          {
+            כותרת: "חוק קולון ושדה חשמלי",
+            מטרות: [
+              "חוק קולון והכוח בין מטענים",
+              "הגדרת שדה חשמלי ועוצמתו",
+              "שדה חשמלי של מטען נקודתי",
+              "עקרון הסופרפוזיציה לשדות",
+              "קווי שדה וייצוגם"
+            ],
+            completedGoals: []
+          },
+          {
+            כותרת: "פוטנציאל חשמלי",
+            מטרות: [
+              "הגדרת פוטנציאל חשמלי ויחידותיו",
+              "הקשר בין שדה לפוטנציאל",
+              "פוטנציאל של מטען נקודתי",
+              "עבודה בשדה חשמלי",
+              "אנרגיה פוטנציאלית חשמלית"
+            ],
+            completedGoals: []
+          }
+        ]
+      },
+      {
+        שם: "זרם חשמלי",
+        מצגת: "מעגלים ותכונות זרם",
+        נושאים: [
+          {
+            כותרת: "זרם והתנגדות",
+            מטרות: [
+              "הגדרת זרם חשמלי ויחידותיו",
+              "חוק אוהם: V = IR",
+              "התנגדות והתנגדות סגולית",
+              "השפעת טמפרטורה על התנגדות",
+              "התנגדות פנימית של מקור מתח"
+            ],
+            completedGoals: []
+          },
+          {
+            כותרת: "חוקי קירכהוף",
+            מטרות: [
+              "חוק קירכהוף הראשון (חוק הזרמים)",
+              "חוק קירכהוף השני (חוק המתחים)",
+              "פתרון מעגלים מורכבים",
+              "חיבור התנגדויות בטור ובמקביל"
+            ],
+            completedGoals: []
+          }
+        ]
+      },
+      {
+        שם: "מגנטיות",
+        מצגת: "שדות מגנטיים וכוחות",
+        נושאים: [
+          {
+            כותרת: "שדה מגנטי וכוח לורנץ",
+            מטרות: [
+              "הגדרת שדה מגנטי ויחידותיו",
+              "כוח לורנץ על מטען נע",
+              "תנועת מטען בשדה מגנטי אחיד",
+              "כוח על זרם בשדה מגנטי",
+              "מומנט על לולאת זרם"
+            ],
+            completedGoals: []
+          },
+          {
+            כותרת: "חוק ביו-סבאר ואמפר",
+            מטרות: [
+              "חוק ביו-סבאר לשדה מגנטי",
+              "שדה מגנטי של זרם ישר",
+              "שדה מגנטי של לולאה עגולה",
+              "חוק אמפר ויישומיו",
+              "שדה מגנטי בתוך סולנואיד"
+            ],
+            completedGoals: []
+          }
+        ]
+      },
+      {
+        שם: "אינדוקציה אלקטרומגנטית",
+        מצגת: "חוק פאראדיי ולנץ",
+        נושאים: [
+          {
+            כותרת: "חוק פאראדיי",
+            מטרות: [
+              "זרם השראה וחוק פאראדיי",
+              "כלל לנץ לכיוון הזרם המושרה",
+              "אינדוקציה הדדית ועצמית",
+              "אנרגיה בשדה מגנטי",
+              "גנרטורים ומנועים"
+            ],
+            completedGoals: []
+          }
+        ]
+      }
+    ]
+  }
+]
+
+function App() {
+  const [currentView, setCurrentView] = useState<'courses' | 'lessons' | 'lesson-detail'>('courses')
+  
+  // טוען נתונים שמורים או נתוני דוגמה
+  const loadSavedCourses = () => {
+    try {
+      const saved = localStorage.getItem('studyDashboardCourses')
+      if (saved && saved !== 'undefined' && saved !== 'null') {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed
+        }
+      }
+      // אם אין נתונים שמורים או שהם ריקים, החזר נתוני דוגמה
+      return sampleCourses
+    } catch (error) {
+      console.error('שגיאה בטעינת נתונים:', error)
+      // במקרה של שגיאה, נקה את הstorage ונחזיר נתוני דוגמה
+      localStorage.removeItem('studyDashboardCourses')
+      return sampleCourses
+    }
+  }
+  
+  const [courses, setCourses] = useState(loadSavedCourses)
+  const [currentCourse, setCurrentCourse] = useState<any>(null)
+  const [currentLesson, setCurrentLesson] = useState<any>(null)
+  const [newCourseText, setNewCourseText] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newLessonText, setNewLessonText] = useState('')
+  const [showAddLessonForm, setShowAddLessonForm] = useState(false)
+  const [editingCourse, setEditingCourse] = useState<any>(null)
+  const [editingLesson, setEditingLesson] = useState<any>(null)
+  const [editCourseText, setEditCourseText] = useState('')
+  const [editLessonText, setEditLessonText] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved')
+
+  // שמירה אוטומטית בכל שינוי
+  useEffect(() => {
+    setSaveStatus('saving')
+    const saveTimeout = setTimeout(() => {
+      try {
+        localStorage.setItem('studyDashboardCourses', JSON.stringify(courses))
+        setSaveStatus('saved')
+      } catch (error) {
+        console.error('שגיאה בשמירת נתונים:', error)
+        setSaveStatus('error')
+      }
+    }, 500) // שמירה עם השהיה קטנה
+    
+    return () => clearTimeout(saveTimeout)
+  }, [courses])
+
+  // פונקציות ניהול נתונים
+  const exportData = () => {
+    try {
+      const dataStr = JSON.stringify(courses, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `study-dashboard-backup-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      alert('נתונים יוצאו בהצלחה!')
+    } catch (error) {
+      alert('שגיאה בייצוא הנתונים')
+    }
+  }
+
+  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target?.result as string)
+        if (Array.isArray(importedData) && importedData.length > 0) {
+          if (confirm('האם אתה בטוח שרוצה להחליף את כל הנתונים הקיימים?')) {
+            setCourses(importedData)
+            alert('נתונים יובאו בהצלחה!')
+          }
+        } else {
+          alert('קובץ לא תקין')
+        }
+      } catch (error) {
+        alert('שגיאה בקריאת הקובץ')
+      }
+    }
+    reader.readAsText(file)
+    event.target.value = '' // איפוס ה-input
+  }
+
+  const resetData = () => {
+    if (confirm('האם אתה בטוח שרוצה למחוק את כל הנתונים ולהתחיל מחדש?')) {
+      if (confirm('זו פעולה בלתי הפיכה! האם אתה בטוח?')) {
+        localStorage.removeItem('studyDashboardCourses')
+        setCourses(sampleCourses)
+        setCurrentCourse(null)
+        setCurrentLesson(null)
+        setCurrentView('courses')
+        setSaveStatus('saved')
+        alert('הנתונים אופסו בהצלחה!')
+      }
+    }
+  }
+
+  const forceLoadSampleData = () => {
+    if (confirm('האם אתה רוצה לטעון את נתוני הדוגמה?')) {
+      setCourses(sampleCourses)
+      setCurrentCourse(null)
+      setCurrentLesson(null)
+      setCurrentView('courses')
+      setSaveStatus('saved')
+      alert('נתוני הדוגמה נטענו בהצלחה!')
+    }
+  }
+  
+  const toggleGoal = (topicIndex: number, goalText: string) => {
+    if (!currentLesson) return
+    
+    const updatedTopics = [...currentLesson.נושאים]
+    const topic = updatedTopics[topicIndex]
+    
+    if (topic.completedGoals.includes(goalText)) {
+      topic.completedGoals = topic.completedGoals.filter((g: string) => g !== goalText)
+    } else {
+      topic.completedGoals.push(goalText)
+    }
+    
+    const updatedLesson = { ...currentLesson, נושאים: updatedTopics }
+    setCurrentLesson(updatedLesson)
+    
+    // עדכון גם במאגר הנתונים
+    const updatedCourses = courses.map(course => {
+      if (course.id === currentCourse.id) {
+        const updatedLessons = course.שיעורים.map((lesson: any) => 
+          lesson.שם === currentLesson.שם ? updatedLesson : lesson
+        )
+        return { ...course, שיעורים: updatedLessons }
+      }
+      return course
+    })
+    setCourses(updatedCourses)
+    
+    // עדכון הקורס הנוכחי
+    const updatedCurrentCourse = updatedCourses.find(c => c.id === currentCourse.id)
+    setCurrentCourse(updatedCurrentCourse)
+  }
+  
+  const addNewCourse = () => {
+    try {
+      const newCourse = JSON.parse(newCourseText)
+      if (newCourse.קורס && newCourse.שיעורים) {
+        const courseWithId = {
+          id: Date.now(),
+          ...newCourse,
+          שיעורים: newCourse.שיעורים.map((lesson: any) => ({
+            ...lesson,
+            נושאים: lesson.נושאים.map((topic: any) => ({
+              ...topic,
+              completedGoals: topic.completedGoals || []
+            }))
+          }))
+        }
+        setCourses([...courses, courseWithId])
+        setNewCourseText('')
+        setShowAddForm(false)
+        alert('קורס נוסף בהצלחה!')
+      } else {
+        alert('JSON חייב לכלול "קורס" ו"שיעורים"')
+      }
+    } catch (error) {
+      alert('JSON לא תקין')
+    }
+  }
+
+  const addNewLesson = () => {
+    try {
+      const newLesson = JSON.parse(newLessonText)
+      if (newLesson.שם && newLesson.מצגת && newLesson.נושאים) {
+        const lessonWithDefaults = {
+          ...newLesson,
+          נושאים: newLesson.נושאים.map((topic: any) => ({
+            ...topic,
+            completedGoals: topic.completedGoals || []
+          }))
+        }
+        
+        const updatedCourses = courses.map(course => {
+          if (course.id === currentCourse.id) {
+            return {
+              ...course,
+              שיעורים: [...course.שיעורים, lessonWithDefaults]
+            }
+          }
+          return course
+        })
+        
+        setCourses(updatedCourses)
+        setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
+        setNewLessonText('')
+        setShowAddLessonForm(false)
+        alert('שיעור נוסף בהצלחה!')
+      } else {
+        alert('JSON חייב לכלול "שם", "מצגת" ו"נושאים"')
+      }
+    } catch (error) {
+      alert('JSON לא תקין')
+    }
+  }
+
+  // פונקציות מחיקה ועריכה
+  const deleteCourse = (courseId: number) => {
+    if (confirm('האם אתה בטוח שרוצה למחוק את הקורס?')) {
+      setCourses(courses.filter(course => course.id !== courseId))
+      alert('קורס נמחק בהצלחה!')
+    }
+  }
+
+  const deleteLesson = (lessonName: string) => {
+    if (confirm('האם אתה בטוח שרוצה למחוק את השיעור?')) {
+      const updatedCourses = courses.map(course => {
+        if (course.id === currentCourse.id) {
+          return {
+            ...course,
+            שיעורים: course.שיעורים.filter((lesson: any) => lesson.שם !== lessonName)
+          }
+        }
+        return course
+      })
+      setCourses(updatedCourses)
+      setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
+      alert('שיעור נמחק בהצלחה!')
+    }
+  }
+
+  const startEditCourse = (course: any) => {
+    setEditingCourse(course)
+    setEditCourseText(JSON.stringify({
+      קורס: course.קורס,
+      שיעורים: course.שיעורים
+    }, null, 2))
+  }
+
+  const startEditLesson = (lesson: any) => {
+    setEditingLesson(lesson)
+    setEditLessonText(JSON.stringify({
+      שם: lesson.שם,
+      מצגת: lesson.מצגת,
+      נושאים: lesson.נושאים
+    }, null, 2))
+  }
+
+  const saveEditCourse = () => {
+    try {
+      const editedCourse = JSON.parse(editCourseText)
+      if (editedCourse.קורס && editedCourse.שיעורים) {
+        const updatedCourses = courses.map(course => {
+          if (course.id === editingCourse.id) {
+            return {
+              ...course,
+              קורס: editedCourse.קורס,
+              שיעורים: editedCourse.שיעורים.map((lesson: any) => ({
+                ...lesson,
+                נושאים: lesson.נושאים.map((topic: any) => ({
+                  ...topic,
+                  completedGoals: topic.completedGoals || []
+                }))
+              }))
+            }
+          }
+          return course
+        })
+        setCourses(updatedCourses)
+        setEditingCourse(null)
+        setEditCourseText('')
+        alert('קורס עודכן בהצלחה!')
+      } else {
+        alert('JSON חייב לכלול "קורס" ו"שיעורים"')
+      }
+    } catch (error) {
+      alert('JSON לא תקין')
+    }
+  }
+
+  const saveEditLesson = () => {
+    try {
+      const editedLesson = JSON.parse(editLessonText)
+      if (editedLesson.שם && editedLesson.מצגת && editedLesson.נושאים) {
+        const updatedCourses = courses.map(course => {
+          if (course.id === currentCourse.id) {
+            return {
+              ...course,
+              שיעורים: course.שיעורים.map((lesson: any) => 
+                lesson.שם === editingLesson.שם ? {
+                  ...editedLesson,
+                  נושאים: editedLesson.נושאים.map((topic: any) => ({
+                    ...topic,
+                    completedGoals: topic.completedGoals || []
+                  }))
+                } : lesson
+              )
+            }
+          }
+          return course
+        })
+        setCourses(updatedCourses)
+        setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
+        setEditingLesson(null)
+        setEditLessonText('')
+        alert('שיעור עודכן בהצלחה!')
+      } else {
+        alert('JSON חייב לכלול "שם", "מצגת" ו"נושאים"')
+      }
+    } catch (error) {
+      alert('JSON לא תקין')
+    }
+  }
+
+  const getCourseProgress = (course: any) => {
+    const totalGoals = course.שיעורים.reduce((sum: number, lesson: any) => 
+      sum + lesson.נושאים.reduce((topicSum: number, topic: any) => 
+        topicSum + topic.מטרות.length, 0), 0)
+    
+    const completedGoals = course.שיעורים.reduce((sum: number, lesson: any) => 
+      sum + lesson.נושאים.reduce((topicSum: number, topic: any) => 
+        topicSum + (topic.completedGoals?.length || 0), 0), 0)
+    
+    return totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0
+  }
+
+  const getLessonProgress = (lesson: any) => {
+    const totalGoals = lesson.נושאים.reduce((sum: number, topic: any) => sum + topic.מטרות.length, 0)
+    const completedGoals = lesson.נושאים.reduce((sum: number, topic: any) => sum + (topic.completedGoals?.length || 0), 0)
+    return totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0
+  }
+
+  // 1️⃣ תצוגת רשימת קורסים (עמוד ראשי)
+  if (currentView === 'courses') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex justify-between items-center mb-8">
+            <div className="flex items-center gap-4">
+              <h1 className="text-3xl font-bold text-gray-800">🎓 דשבורד לימודים</h1>
+              <div className={`text-sm px-3 py-1 rounded-full ${
+                saveStatus === 'saved' ? 'text-green-700 bg-green-100' :
+                saveStatus === 'saving' ? 'text-yellow-700 bg-yellow-100' :
+                'text-red-700 bg-red-100'
+              }`}>
+                {saveStatus === 'saved' && '💾 נשמר'}
+                {saveStatus === 'saving' && '⏳ שומר...'}
+                {saveStatus === 'error' && '❌ שגיאה'}
+              </div>
+            </div>
+            
+            <div className="flex gap-2">
+              {/* כפתורי ניהול נתונים */}
+              <div className="relative group">
+                <button className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm">
+                  ⚙️ ניהול נתונים
+                </button>
+                
+                {/* תפריט נפתח */}
+                <div className="absolute left-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 w-48">
+                  <button
+                    onClick={exportData}
+                    className="w-full text-right px-4 py-2 hover:bg-gray-100 transition-colors text-sm border-b border-gray-100"
+                  >
+                    📥 ייצא נתונים
+                  </button>
+                  
+                  <label className="w-full text-right px-4 py-2 hover:bg-gray-100 transition-colors text-sm border-b border-gray-100 cursor-pointer block">
+                    📤 ייבא נתונים
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={importData}
+                      className="hidden"
+                    />
+                  </label>
+                  
+                  <button
+                    onClick={forceLoadSampleData}
+                    className="w-full text-right px-4 py-2 hover:bg-blue-100 text-blue-600 transition-colors text-sm border-b border-gray-100"
+                  >
+                    📚 טען נתוני דוגמה
+                  </button>
+                  
+                  <button
+                    onClick={resetData}
+                    className="w-full text-right px-4 py-2 hover:bg-red-100 text-red-600 transition-colors text-sm"
+                  >
+                    🗑️ איפוס נתונים
+                  </button>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                ➕ הוסף קורס
+              </button>
+            </div>
+          </div>
+
+          {/* טופס הוספת קורס */}
+          {showAddForm && (
+            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100 mb-6">
+              <h2 className="text-xl font-semibold mb-4">הוסף קורס חדש</h2>
+              <p className="text-sm text-gray-600 mb-3">פורמט JSON חדש עם שיעורים:</p>
+              <textarea
+                value={newCourseText}
+                onChange={(e) => setNewCourseText(e.target.value)}
+                placeholder={`{
+  "קורס": "שם הקורס (למשל: כימיה פיזיקלית)",
+  "שיעורים": [
+    {
+      "שם": "שם השיעור הראשון",
+      "מצגת": "כותרת המצגת",
+      "נושאים": [
+        {
+          "כותרת": "נושא ראשון",
+          "מטרות": [
+            "מטרה 1",
+            "מטרה 2"
+          ]
+        }
+      ]
+    },
+    {
+      "שם": "שם השיעור השני",
+      "מצגת": "כותרת המצגת",
+      "נושאים": [...]
+    }
+  ]
+}`}
+                className="w-full h-64 p-3 border border-gray-300 rounded-lg font-mono text-sm mb-4"
+              />
+              <div className="flex gap-2">
+                <button 
+                  onClick={addNewCourse}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  ✅ הוסף קורס
+                </button>
+                <button 
+                  onClick={() => setShowAddForm(false)}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  ❌ ביטול
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* רשימת קורסים */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {courses.map((course) => {
+              const progress = getCourseProgress(course)
+              const totalLessons = course.שיעורים.length
+              
+              return (
+                <div 
+                  key={course.id}
+                  className="bg-white rounded-lg shadow-md p-6 border border-gray-100 hover:shadow-lg transition-all border-r-4 border-blue-500 relative"
+                >
+                  {/* כפתורי עריכה ומחיקה */}
+                  <div className="absolute top-2 left-2 flex gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startEditCourse(course)
+                      }}
+                      className="bg-yellow-500 text-white p-1 rounded text-xs hover:bg-yellow-600 transition-colors"
+                      title="ערוך קורס"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteCourse(course.id)
+                      }}
+                      className="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
+                      title="מחק קורס"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      setCurrentCourse(course)
+                      setCurrentView('lessons')
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 pr-12">📚 {course.קורס}</h3>
+                    
+                    <div className="mb-3">
+                      <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <span>התקדמות כללית</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className="bg-blue-600 h-3 rounded-full transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-600">
+                      📖 {totalLessons} שיעורים
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {courses.length === 0 && (
+            <div className="text-center py-12">
+              <h3 className="text-xl font-semibold text-gray-600 mb-4">אין קורסים עדיין</h3>
+              <p className="text-gray-500 mb-6">התחל על ידי הוספת הקורס הראשון שלך</p>
+              
+              {/* כפתור חירום לטעינת נתוני דוגמה */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 max-w-md mx-auto">
+                <h4 className="text-lg font-semibold text-blue-800 mb-2">רוצה להתחיל עם דוגמאות?</h4>
+                <p className="text-blue-600 text-sm mb-4">טען קורסי דוגמה (כימיה, פיזיקה, מבני נתונים)</p>
+                <button
+                  onClick={forceLoadSampleData}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  📚 טען נתוני דוגמה
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* מודל עריכת קורס */}
+          {editingCourse && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">ערוך קורס: {editingCourse.קורס}</h2>
+                  <button 
+                    onClick={() => {setEditingCourse(null); setEditCourseText('')}}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ❌
+                  </button>
+                </div>
+                
+                <textarea
+                  value={editCourseText}
+                  onChange={(e) => setEditCourseText(e.target.value)}
+                  className="w-full h-96 p-3 border border-gray-300 rounded-lg font-mono text-sm mb-4"
+                />
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={saveEditCourse}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    ✅ שמור שינויים
+                  </button>
+                  <button 
+                    onClick={() => {setEditingCourse(null); setEditCourseText('')}}
+                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    ❌ ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // 2️⃣ תצוגת שיעורים בקורס
+  if (currentView === 'lessons') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setCurrentView('courses')
+                  setCurrentCourse(null)
+                }}
+                className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                ← חזרה לקורסים
+              </button>
+              <h1 className="text-3xl font-bold text-gray-800">📚 {currentCourse?.קורס}</h1>
+            </div>
+            <button 
+              onClick={() => setShowAddLessonForm(!showAddLessonForm)}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+            >
+              ➕ הוסף שיעור
+            </button>
+          </div>
+
+          {/* טופס הוספת שיעור */}
+          {showAddLessonForm && (
+            <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100 mb-6">
+              <h2 className="text-xl font-semibold mb-4">הוסף שיעור חדש ל"{currentCourse?.קורס}"</h2>
+              <p className="text-sm text-gray-600 mb-3">פורמט JSON לשיעור:</p>
+              <textarea
+                value={newLessonText}
+                onChange={(e) => setNewLessonText(e.target.value)}
+                placeholder={`{
+  "שם": "שם השיעור החדש",
+  "מצגת": "כותרת המצגת",
+  "נושאים": [
+    {
+      "כותרת": "נושא ראשון",
+      "מטרות": [
+        "מטרה 1",
+        "מטרה 2",
+        "מטרה 3"
+      ]
+    },
+    {
+      "כותרת": "נושא שני", 
+      "מטרות": [
+        "מטרה 4",
+        "מטרה 5"
+      ]
+    }
+  ]
+}`}
+                className="w-full h-48 p-3 border border-gray-300 rounded-lg font-mono text-sm mb-4"
+              />
+              <div className="flex gap-2">
+                <button 
+                  onClick={addNewLesson}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  ✅ הוסף שיעור
+                </button>
+                <button 
+                  onClick={() => setShowAddLessonForm(false)}
+                  className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  ❌ ביטול
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* רשימת שיעורים */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {currentCourse?.שיעורים.map((lesson: any, index: number) => {
+              const progress = getLessonProgress(lesson)
+              const totalTopics = lesson.נושאים.length
+              
+              return (
+                <div 
+                  key={index}
+                  className="bg-white rounded-lg shadow-md p-6 border border-gray-100 hover:shadow-lg transition-all border-r-4 border-green-500 relative"
+                >
+                  {/* כפתורי עריכה ומחיקה */}
+                  <div className="absolute top-2 left-2 flex gap-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startEditLesson(lesson)
+                      }}
+                      className="bg-yellow-500 text-white p-1 rounded text-xs hover:bg-yellow-600 transition-colors"
+                      title="ערוך שיעור"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteLesson(lesson.שם)
+                      }}
+                      className="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
+                      title="מחק שיעור"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+
+                  <div 
+                    onClick={() => {
+                      setCurrentLesson(lesson)
+                      setCurrentView('lesson-detail')
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <h3 className="text-lg font-bold text-gray-800 mb-3 pr-12">📖 {lesson.שם}</h3>
+                    <p className="text-sm text-gray-600 mb-4">{lesson.מצגת}</p>
+                    
+                    <div className="mb-3">
+                      <div className="flex justify-between text-sm text-gray-600 mb-1">
+                        <span>התקדמות</span>
+                        <span>{progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div 
+                          className="bg-green-600 h-3 rounded-full transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="text-sm text-gray-600">
+                      📝 {totalTopics} נושאים
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* מודל עריכת שיעור */}
+          {editingLesson && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">ערוך שיעור: {editingLesson.שם}</h2>
+                  <button 
+                    onClick={() => {setEditingLesson(null); setEditLessonText('')}}
+                    className="text-gray-500 hover:text-gray-700"
+                  >
+                    ❌
+                  </button>
+                </div>
+                
+                <textarea
+                  value={editLessonText}
+                  onChange={(e) => setEditLessonText(e.target.value)}
+                  className="w-full h-96 p-3 border border-gray-300 rounded-lg font-mono text-sm mb-4"
+                />
+                
+                <div className="flex gap-2">
+                  <button 
+                    onClick={saveEditLesson}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    ✅ שמור שינויים
+                  </button>
+                  <button 
+                    onClick={() => {setEditingLesson(null); setEditLessonText('')}}
+                    className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    ❌ ביטול
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // 3️⃣ תצוגת פרטי שיעור
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={() => setCurrentView('lessons')}
+            className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+          >
+            ← חזרה לשיעורים
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">{currentLesson?.שם}</h1>
+            <p className="text-gray-600">{currentLesson?.מצגת}</p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {currentLesson?.נושאים.map((topic: any, topicIndex: number) => (
+            <div key={topicIndex} className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 {topic.כותרת}</h3>
+              
+              <div className="space-y-2">
+                {topic.מטרות.map((goal: string, goalIndex: number) => {
+                  const isCompleted = topic.completedGoals?.includes(goal)
+                  return (
+                    <div 
+                      key={goalIndex}
+                      className={`flex items-start gap-3 p-3 rounded-lg transition-colors relative group ${
+                        isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50 hover:bg-gray-100'
+                      }`}
+                    >
+                      <span 
+                        className="text-lg cursor-pointer"
+                        onClick={() => toggleGoal(topicIndex, goal)}
+                      >
+                        {isCompleted ? '✅' : '⭕'}
+                      </span>
+                      <span 
+                        className={`text-sm flex-1 cursor-pointer ${isCompleted ? 'text-green-800 line-through' : 'text-gray-700'}`}
+                        onClick={() => toggleGoal(topicIndex, goal)}
+                      >
+                        {goal}
+                      </span>
+                      
+                      {/* כפתור מחיקת מטרה - מופיע בהובר */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (confirm('האם אתה בטוח שרוצה למחוק את המטרה הזו?')) {
+                            const updatedTopics = [...currentLesson.נושאים]
+                            updatedTopics[topicIndex].מטרות = updatedTopics[topicIndex].מטרות.filter((g: string) => g !== goal)
+                            updatedTopics[topicIndex].completedGoals = updatedTopics[topicIndex].completedGoals?.filter((g: string) => g !== goal) || []
+                            
+                            const updatedLesson = { ...currentLesson, נושאים: updatedTopics }
+                            setCurrentLesson(updatedLesson)
+                            
+                            const updatedCourses = courses.map(course => {
+                              if (course.id === currentCourse.id) {
+                                const updatedLessons = course.שיעורים.map((lesson: any) => 
+                                  lesson.שם === currentLesson.שם ? updatedLesson : lesson
+                                )
+                                return { ...course, שיעורים: updatedLessons }
+                              }
+                              return course
+                            })
+                            setCourses(updatedCourses)
+                            setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition-all"
+                        title="מחק מטרה"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default App
