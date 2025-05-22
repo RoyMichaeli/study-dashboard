@@ -598,6 +598,26 @@ function App() {
     return JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
   }
 
+  // פונקציה עזר לעדכון סטטיסטיקות
+  const updateTodayStats = () => {
+    try {
+      const sessions = getSessionsHistory()
+      const today = new Date().toDateString()
+      const todaySessions = sessions.filter((session: any) => 
+        session.type === 'work' && 
+        session.completed && 
+        new Date(session.startTime).toDateString() === today
+      )
+      setTodayCompletedSessions(todaySessions.length)
+      
+      // חישוב זמן לימוד יומי
+      const totalTime = todaySessions.reduce((total: number, session: any) => total + session.duration, 0)
+      setTodayStudyTime(totalTime)
+    } catch (error) {
+      console.error('Error updating today sessions:', error)
+    }
+  }
+
   // שמירה אוטומטית בכל שינוי
   useEffect(() => {
     setSaveStatus('saving')
@@ -664,7 +684,9 @@ function App() {
         setTimerState('break')
         setTimeLeft(isLongBreak ? LONG_BREAK : SHORT_BREAK)
         setCurrentSession(prev => ({ ...prev, sessionCount: newSessionCount }))
-        setTodayCompletedSessions(prev => prev + 1)
+        
+        // עדכון סטטיסטיקות
+        updateTodayStats()
       } else {
         showNotification('הפסקה הסתיימה! 💪', 'בואו נמשיך ללמוד')
         setTimerState('idle')
@@ -682,19 +704,7 @@ function App() {
     }
     
     // טען סטטיסטיקות היום
-    try {
-      const sessions = getSessionsHistory()
-      const today = new Date().toDateString()
-      const todaySessions = sessions.filter((session: any) => 
-        session.type === 'work' && 
-        session.completed && 
-        new Date(session.startTime).toDateString() === today
-      )
-      setTodayCompletedSessions(todaySessions.length)
-    } catch (error) {
-      console.error('Error loading today sessions:', error)
-      setTodayCompletedSessions(0)
-    }
+    updateTodayStats()
   }, [])
 
   // Keyboard Shortcuts
@@ -1080,6 +1090,9 @@ function App() {
     setCurrentCourse(updatedCurrentCourse)
   }
 
+  // משתנה state לזמן לימוד יומי
+  const [todayStudyTime, setTodayStudyTime] = useState(0)
+
   // פונקציות נוספות לטיימר
   const getTodayStudyTime = () => {
     const sessions = getSessionsHistory()
@@ -1132,35 +1145,40 @@ function App() {
   }
 
   const completeSession = () => {
-    if (timerState === 'working') {
-      if (timeLeft === 0 && isRunning) {
-        playNotificationSound()
-        
-        // שמירת סשן הלימוד
-        const sessionData = {
-          id: Date.now().toString(),
-          courseId: currentSession.courseId,
-          lessonName: currentSession.lessonName,
-          topicTitle: currentSession.topicTitle,
-          startTime: currentSession.startTime,
-          endTime: new Date(),
-          duration: WORK_TIME,
-          type: 'work',
-          completed: true
-        }
-        saveStudySession(sessionData)
-        
-        const newSessionCount = (currentSession.sessionCount || 0) + 1
-        const isLongBreak = newSessionCount % SESSIONS_UNTIL_LONG_BREAK === 0
-        
-        showNotification('פומודורו הושלם! 🎉', 
-          isLongBreak ? 'זמן להפסקה ארוכה' : 'זמן להפסקה קצרה')
-        
-        setTimerState('break')
-        setTimeLeft(isLongBreak ? LONG_BREAK : SHORT_BREAK)
-        setCurrentSession(prev => ({ ...prev, sessionCount: newSessionCount }))
-        setTodayCompletedSessions(prev => prev + 1)
+    if (timerState === 'working' && isRunning) {
+      // עצור את הטיימר
+      setIsRunning(false)
+      playNotificationSound()
+      
+      // חישוב זמן לימוד בפועל (כמה זמן עבר מתחילת הסשן)
+      const actualDuration = WORK_TIME - timeLeft
+      
+      // שמירת סשן הלימוד
+      const sessionData = {
+        id: Date.now().toString(),
+        courseId: currentSession.courseId,
+        lessonName: currentSession.lessonName,
+        topicTitle: currentSession.topicTitle,
+        startTime: currentSession.startTime,
+        endTime: new Date(),
+        duration: actualDuration, // הזמן שבפועל לומדו
+        type: 'work',
+        completed: true
       }
+      saveStudySession(sessionData)
+      
+      const newSessionCount = (currentSession.sessionCount || 0) + 1
+      const isLongBreak = newSessionCount % SESSIONS_UNTIL_LONG_BREAK === 0
+      
+      showNotification('פומודורו הושלם ידנית! 🎉', 
+        isLongBreak ? 'זמן להפסקה ארוכה' : 'זמן להפסקה קצרה')
+      
+      setTimerState('break')
+      setTimeLeft(isLongBreak ? LONG_BREAK : SHORT_BREAK)
+      setCurrentSession(prev => ({ ...prev, sessionCount: newSessionCount }))
+      
+      // עדכון סטטיסטיקות
+      updateTodayStats()
     }
   }
 
@@ -1311,7 +1329,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div className="text-center">
                 <div className="text-lg font-bold text-green-700">
-                  {Math.floor((getTodayStudyTime() || 0) / 60)} דקות
+                  {Math.floor(todayStudyTime / 60)} דקות
                 </div>
                 <div className="text-green-600">⏱️ זמן לימוד</div>
               </div>
@@ -1323,7 +1341,7 @@ function App() {
               </div>
               <div className="text-center">
                 <div className="text-lg font-bold text-green-700">
-                  {Math.round(((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%
+                  {Math.round((todayStudyTime / (DAILY_GOAL_MINUTES * 60)) * 100)}%
                 </div>
                 <div className="text-green-600">🎯 יעילות יומית</div>
               </div>
@@ -1339,7 +1357,7 @@ function App() {
                 <div 
                   className="bg-green-500 h-2 rounded-full transition-all"
                   style={{
-                    width: `${Math.min(100, ((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%`
+                    width: `${Math.min(100, (todayStudyTime / (DAILY_GOAL_MINUTES * 60)) * 100)}%`
                   }}
                 />
               </div>
@@ -1626,7 +1644,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               <div className="text-center">
                 <div className="text-lg font-bold text-green-700">
-                  {Math.floor((getTodayStudyTime() || 0) / 60)} דקות
+                  {Math.floor(todayStudyTime / 60)} דקות
                 </div>
                 <div className="text-green-600">⏱️ זמן לימוד</div>
               </div>
@@ -1638,7 +1656,7 @@ function App() {
               </div>
               <div className="text-center">
                 <div className="text-lg font-bold text-green-700">
-                  {Math.round(((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%
+                  {Math.round((todayStudyTime / (DAILY_GOAL_MINUTES * 60)) * 100)}%
                 </div>
                 <div className="text-green-600">🎯 יעילות יומית</div>
               </div>
