@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 import './index.css'
 
+// קבועים לטיימר פומודורו
+const WORK_TIME = 25 * 60      // 25 דקות עבודה
+const SHORT_BREAK = 5 * 60     // 5 דקות הפסקה
+const LONG_BREAK = 15 * 60     // 15 דקות הפסקה ארוכה
+const SESSIONS_UNTIL_LONG_BREAK = 4
+const DAILY_GOAL_MINUTES = 120 // 2 שעות ביום
+const SESSIONS_KEY = 'studyDashboardSessions'
+
 // נתונים לדוגמה עם המבנה החדש
 const sampleCourses = [
   {
@@ -552,6 +560,43 @@ function App() {
   const [editCourseText, setEditCourseText] = useState('')
   const [editLessonText, setEditLessonText] = useState('')
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved')
+  const [editingGoalNote, setEditingGoalNote] = useState<{topicIndex: number, goalText: string} | null>(null)
+  const [tempNoteText, setTempNoteText] = useState('')
+
+  // משתני state לטיימר פומודורו
+  const [timerState, setTimerState] = useState<'idle' | 'working' | 'break'>('idle')
+  const [timeLeft, setTimeLeft] = useState(WORK_TIME)
+  const [isRunning, setIsRunning] = useState(false)
+  const [currentSession, setCurrentSession] = useState<{
+    courseId?: number
+    lessonName?: string
+    topicTitle?: string
+    startTime?: Date
+    sessionCount?: number
+  }>({})
+  const [todayCompletedSessions, setTodayCompletedSessions] = useState(0)
+
+  // פונקציות עזר לטיימר
+  const playNotificationSound = () => {
+    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+KVaOiDTAdZAkGZTRLiVCKF8OdwCyRNKGGLEJQYUpzIYBhNB1wWzNkOQCVaTEHhkEAMtN+KJRNBaIlIzYtO2NvLWeFP4cVPaRZM8YiNx4SBZaRZzgKKaZhFFUbGUfNRlGbPYNdZAoHWFAKQgBdIKUbGHFWO2t8REptQktsZFQ9gBmDZ3F0YENOZhQOSbQpSQkNFJI3SU5VULPYKVkkW3QIHG5sJR3EaDNpWUtfNZPYpVNSYX1wGbTEpWfJPJQ5UlksGcKKjCdgMlFrUyNdQKk8VHpPf2jQJi1tMyVQI3l5Z0FnVVdjbFt3KlVdTZA3YykQXFc=')
+    audio.play().catch(() => {}) // התעלם מאירוע אם אין הרשאה
+  }
+
+  const showNotification = (title: string, body: string) => {
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body })
+    }
+  }
+
+  const saveStudySession = (session: any) => {
+    const sessions = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
+    sessions.push(session)
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
+  }
+
+  const getSessionsHistory = () => {
+    return JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
+  }
 
   // שמירה אוטומטית בכל שינוי
   useEffect(() => {
@@ -568,6 +613,128 @@ function App() {
     
     return () => clearTimeout(saveTimeout)
   }, [courses])
+
+  // useEffect לטיימר
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+    
+    if (isRunning && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(timeLeft => {
+          if (timeLeft <= 1) {
+            // הטיימר הסתיים - נטפל בזה כאן במקום לקרוא לפונקציה שעדיין לא הוגדרה
+            return 0
+          }
+          return timeLeft - 1
+        })
+      }, 1000)
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isRunning, timeLeft])
+
+  // כשהטיימר מגיע לאפס
+  useEffect(() => {
+    if (timeLeft === 0 && isRunning) {
+      playNotificationSound()
+      
+      if (timerState === 'working') {
+        // שמירת סשן הלימוד
+        const sessionData = {
+          id: Date.now().toString(),
+          courseId: currentSession.courseId,
+          lessonName: currentSession.lessonName,
+          topicTitle: currentSession.topicTitle,
+          startTime: currentSession.startTime,
+          endTime: new Date(),
+          duration: WORK_TIME,
+          type: 'work',
+          completed: true
+        }
+        saveStudySession(sessionData)
+        
+        const newSessionCount = (currentSession.sessionCount || 0) + 1
+        const isLongBreak = newSessionCount % SESSIONS_UNTIL_LONG_BREAK === 0
+        
+        showNotification('פומודורו הושלם! 🎉', 
+          isLongBreak ? 'זמן להפסקה ארוכה' : 'זמן להפסקה קצרה')
+        
+        setTimerState('break')
+        setTimeLeft(isLongBreak ? LONG_BREAK : SHORT_BREAK)
+        setCurrentSession(prev => ({ ...prev, sessionCount: newSessionCount }))
+        setTodayCompletedSessions(prev => prev + 1)
+      } else {
+        showNotification('הפסקה הסתיימה! 💪', 'בואו נמשיך ללמוד')
+        setTimerState('idle')
+        setTimeLeft(WORK_TIME)
+        setIsRunning(false)
+        setCurrentSession({})
+      }
+    }
+  }, [timeLeft, isRunning, timerState, currentSession])
+
+  // בקש הרשאות התראה בטעינה
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+    
+    // טען סטטיסטיקות היום
+    try {
+      const sessions = getSessionsHistory()
+      const today = new Date().toDateString()
+      const todaySessions = sessions.filter((session: any) => 
+        session.type === 'work' && 
+        session.completed && 
+        new Date(session.startTime).toDateString() === today
+      )
+      setTodayCompletedSessions(todaySessions.length)
+    } catch (error) {
+      console.error('Error loading today sessions:', error)
+      setTodayCompletedSessions(0)
+    }
+  }, [])
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === ' ') { // Ctrl + Space
+        e.preventDefault()
+        if (isRunning) {
+          pauseTimer()
+        } else {
+          startTimer()
+        }
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeyPress)
+    return () => document.removeEventListener('keydown', handleKeyPress)
+  }, [isRunning])
+
+  // Page Visibility API
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isRunning) {
+        // שמור זמן יציאה
+        localStorage.setItem('timerLeftTime', timeLeft.toString())
+        localStorage.setItem('timerLeftAt', Date.now().toString())
+      } else if (!document.hidden && isRunning) {
+        // חזור לטיימר
+        const leftAt = localStorage.getItem('timerLeftAt')
+        if (leftAt) {
+          const elapsed = Math.floor((Date.now() - parseInt(leftAt)) / 1000)
+          const remainingTime = Math.max(0, timeLeft - elapsed)
+          setTimeLeft(remainingTime)
+        }
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [isRunning, timeLeft])
 
   // פונקציות ניהול נתונים
   const exportData = () => {
@@ -841,8 +1008,10 @@ function App() {
 
   const getCourseProgress = (course: any) => {
     const totalGoals = course.שיעורים.reduce((sum: number, lesson: any) => 
-      sum + lesson.נושאים.reduce((topicSum: number, topic: any) => 
-        topicSum + topic.מטרות.length, 0), 0)
+      sum + lesson.נושאים.reduce((topicSum: number, topic: any) => {
+        // תומך במבנה חדש וישן של מטרות
+        return topicSum + (Array.isArray(topic.מטרות) ? topic.מטרות.length : 0)
+      }, 0), 0)
     
     const completedGoals = course.שיעורים.reduce((sum: number, lesson: any) => 
       sum + lesson.נושאים.reduce((topicSum: number, topic: any) => 
@@ -852,9 +1021,147 @@ function App() {
   }
 
   const getLessonProgress = (lesson: any) => {
-    const totalGoals = lesson.נושאים.reduce((sum: number, topic: any) => sum + topic.מטרות.length, 0)
+    const totalGoals = lesson.נושאים.reduce((sum: number, topic: any) => {
+      // תומך במבנה חדש וישן של מטרות
+      return sum + (Array.isArray(topic.מטרות) ? topic.מטרות.length : 0)
+    }, 0)
     const completedGoals = lesson.נושאים.reduce((sum: number, topic: any) => sum + (topic.completedGoals?.length || 0), 0)
     return totalGoals > 0 ? Math.round((completedGoals / totalGoals) * 100) : 0
+  }
+
+  // פונקציה עזר לטיפול במטרות - תומכת גם במבנה הישן (מחרוזות) וגם במבנה החדש (אובייקטים)
+  const normalizeGoal = (goal: any) => {
+    if (typeof goal === 'string') {
+      return { text: goal, note: '' }
+    }
+    return { text: goal.text || goal, note: goal.note || '' }
+  }
+
+  const normalizeGoals = (goals: any[]) => {
+    return goals.map(normalizeGoal)
+  }
+
+  // פונקציה עזר לעדכון הערה של מטרה
+  const updateGoalNote = (topicIndex: number, goalText: string, note: string) => {
+    if (!currentLesson) return
+    
+    const updatedTopics = [...currentLesson.נושאים]
+    const topic = updatedTopics[topicIndex]
+    
+    // ממיר את המטרות לפורמט החדש אם הן עדיין במבנה הישן
+    const normalizedGoals = normalizeGoals(topic.מטרות)
+    
+    // מעדכן את ההערה של המטרה הספציפית
+    const updatedGoals = normalizedGoals.map(goal => 
+      goal.text === goalText 
+        ? { ...goal, note } 
+        : goal
+    )
+    
+    topic.מטרות = updatedGoals
+    
+    const updatedLesson = { ...currentLesson, נושאים: updatedTopics }
+    setCurrentLesson(updatedLesson)
+    
+    // עדכון גם במאגר הנתונים
+    const updatedCourses = courses.map(course => {
+      if (course.id === currentCourse.id) {
+        const updatedLessons = course.שיעורים.map((lesson: any) => 
+          lesson.שם === currentLesson.שם ? updatedLesson : lesson
+        )
+        return { ...course, שיעורים: updatedLessons }
+      }
+      return course
+    })
+    setCourses(updatedCourses)
+    
+    // עדכון הקורס הנוכחי
+    const updatedCurrentCourse = updatedCourses.find(c => c.id === currentCourse.id)
+    setCurrentCourse(updatedCurrentCourse)
+  }
+
+  // פונקציות נוספות לטיימר
+  const getTodayStudyTime = () => {
+    const sessions = getSessionsHistory()
+    const today = new Date().toDateString()
+    return sessions
+      .filter((session: any) => 
+        session.type === 'work' && 
+        session.completed && 
+        new Date(session.startTime).toDateString() === today
+      )
+      .reduce((total: number, session: any) => total + session.duration, 0)
+  }
+
+  const getWeekStudyTime = () => {
+    const sessions = getSessionsHistory()
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    return sessions
+      .filter((session: any) => 
+        session.type === 'work' && 
+        session.completed && 
+        new Date(session.startTime) >= weekAgo
+      )
+      .reduce((total: number, session: any) => total + session.duration, 0)
+  }
+
+  const startTimer = (courseId?: number, lessonName?: string, topicTitle?: string) => {
+    if (timerState === 'idle') {
+      setTimerState('working')
+      setTimeLeft(WORK_TIME)
+      setCurrentSession({
+        courseId,
+        lessonName,
+        topicTitle,
+        startTime: new Date(),
+        sessionCount: currentSession.sessionCount || 0
+      })
+    }
+    setIsRunning(true)
+  }
+
+  const pauseTimer = () => {
+    setIsRunning(false)
+  }
+
+  const resetTimer = () => {
+    setIsRunning(false)
+    setTimerState('idle')
+    setTimeLeft(WORK_TIME)
+    setCurrentSession({})
+  }
+
+  const completeSession = () => {
+    if (timerState === 'working') {
+      if (timeLeft === 0 && isRunning) {
+        playNotificationSound()
+        
+        // שמירת סשן הלימוד
+        const sessionData = {
+          id: Date.now().toString(),
+          courseId: currentSession.courseId,
+          lessonName: currentSession.lessonName,
+          topicTitle: currentSession.topicTitle,
+          startTime: currentSession.startTime,
+          endTime: new Date(),
+          duration: WORK_TIME,
+          type: 'work',
+          completed: true
+        }
+        saveStudySession(sessionData)
+        
+        const newSessionCount = (currentSession.sessionCount || 0) + 1
+        const isLongBreak = newSessionCount % SESSIONS_UNTIL_LONG_BREAK === 0
+        
+        showNotification('פומודורו הושלם! 🎉', 
+          isLongBreak ? 'זמן להפסקה ארוכה' : 'זמן להפסקה קצרה')
+        
+        setTimerState('break')
+        setTimeLeft(isLongBreak ? LONG_BREAK : SHORT_BREAK)
+        setCurrentSession(prev => ({ ...prev, sessionCount: newSessionCount }))
+        setTodayCompletedSessions(prev => prev + 1)
+      }
+    }
   }
 
   // 1️⃣ תצוגת רשימת קורסים (עמוד ראשי)
@@ -924,6 +1231,118 @@ function App() {
               >
                 ➕ הוסף קורס
               </button>
+            </div>
+          </div>
+
+          {/* Timer Widget פומודורו */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="text-3xl font-mono">
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {timerState === 'working' ? '🎯 עבודה' : 
+                   timerState === 'break' ? '☕ הפסקה' : '⏸️ מוכן'}
+                </div>
+              </div>
+              
+              <div className="flex space-x-2">
+                {!isRunning ? (
+                  <button 
+                    onClick={() => startTimer()} 
+                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                  >
+                    ▶️ התחל
+                  </button>
+                ) : (
+                  <button 
+                    onClick={pauseTimer} 
+                    className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                  >
+                    ⏸️ עצור
+                  </button>
+                )}
+                <button 
+                  onClick={resetTimer} 
+                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+                >
+                  🔄 איפוס
+                </button>
+                {timerState === 'working' && (
+                  <button 
+                    onClick={completeSession} 
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                  >
+                    ✅ סיים
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="mt-3 bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+                style={{
+                  width: `${((timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) - timeLeft) / (timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) * 100}%`
+                }}
+              />
+            </div>
+            
+            {/* Session Info */}
+            {currentSession.courseId && (
+              <div className="mt-2 text-sm text-gray-600">
+                🎓 לומד: {courses.find(c => c.id === currentSession.courseId)?.קורס} 
+                {currentSession.lessonName && ` - ${currentSession.lessonName}`}
+                {currentSession.topicTitle && ` - ${currentSession.topicTitle}`}
+              </div>
+            )}
+            
+            {/* Keyboard shortcut tip */}
+            <div className="mt-2 text-xs text-gray-500">
+              💡 טיפ: לחץ Ctrl + Space להתחלה/עצירה מהירה
+            </div>
+          </div>
+
+          {/* Daily Stats Widget */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <h3 className="font-semibold text-green-800 mb-2">📊 סטטיסטיקות היום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {Math.floor((getTodayStudyTime() || 0) / 60)} דקות
+                </div>
+                <div className="text-green-600">⏱️ זמן לימוד</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {todayCompletedSessions}
+                </div>
+                <div className="text-green-600">🍅 פומודורו הושלמו</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {Math.round(((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%
+                </div>
+                <div className="text-green-600">🎯 יעילות יומית</div>
+              </div>
+            </div>
+            
+            {/* Daily Progress Bar */}
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-green-600 mb-1">
+                <span>התקדמות יומית</span>
+                <span>יעד: {DAILY_GOAL_MINUTES} דקות</span>
+              </div>
+              <div className="bg-green-200 rounded-full h-2">
+                <div 
+                  className="bg-green-500 h-2 rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, ((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%`
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -1130,6 +1549,102 @@ function App() {
             </button>
           </div>
 
+          {/* Timer Widget פומודורו */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="text-3xl font-mono">
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+                </div>
+                <div className="text-sm text-gray-600">
+                  {timerState === 'working' ? '🎯 עבודה' : 
+                   timerState === 'break' ? '☕ הפסקה' : '⏸️ מוכן'}
+                </div>
+              </div>
+              
+              <div className="flex space-x-2">
+                {!isRunning ? (
+                  <button 
+                    onClick={() => startTimer()} 
+                    className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                  >
+                    ▶️ התחל
+                  </button>
+                ) : (
+                  <button 
+                    onClick={pauseTimer} 
+                    className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                  >
+                    ⏸️ עצור
+                  </button>
+                )}
+                <button 
+                  onClick={resetTimer} 
+                  className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+                >
+                  🔄 איפוס
+                </button>
+                {timerState === 'working' && (
+                  <button 
+                    onClick={completeSession} 
+                    className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                  >
+                    ✅ סיים
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {/* Progress Bar */}
+            <div className="mt-3 bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+                style={{
+                  width: `${((timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) - timeLeft) / (timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) * 100}%`
+                }}
+              />
+            </div>
+            
+            {/* Session Info */}
+            {currentSession.courseId && (
+              <div className="mt-2 text-sm text-gray-600">
+                🎓 לומד: {courses.find(c => c.id === currentSession.courseId)?.קורס} 
+                {currentSession.lessonName && ` - ${currentSession.lessonName}`}
+                {currentSession.topicTitle && ` - ${currentSession.topicTitle}`}
+              </div>
+            )}
+            
+            {/* Keyboard shortcut tip */}
+            <div className="mt-2 text-xs text-gray-500">
+              💡 טיפ: לחץ Ctrl + Space להתחלה/עצירה מהירה
+            </div>
+          </div>
+
+          {/* Daily Stats Widget */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <h3 className="font-semibold text-green-800 mb-2">📊 סטטיסטיקות היום</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {Math.floor((getTodayStudyTime() || 0) / 60)} דקות
+                </div>
+                <div className="text-green-600">⏱️ זמן לימוד</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {todayCompletedSessions}
+                </div>
+                <div className="text-green-600">🍅 פומודורו הושלמו</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-bold text-green-700">
+                  {Math.round(((getTodayStudyTime() || 0) / (DAILY_GOAL_MINUTES * 60)) * 100)}%
+                </div>
+                <div className="text-green-600">🎯 יעילות יומית</div>
+              </div>
+            </div>
+          </div>
+
           {/* טופס הוספת שיעור */}
           {showAddLessonForm && (
             <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100 mb-6">
@@ -1304,64 +1819,213 @@ function App() {
           </div>
         </div>
 
+        {/* Timer Widget פומודורו */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="text-3xl font-mono">
+                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+              </div>
+              <div className="text-sm text-gray-600">
+                {timerState === 'working' ? '🎯 עבודה' : 
+                 timerState === 'break' ? '☕ הפסקה' : '⏸️ מוכן'}
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              {!isRunning ? (
+                <button 
+                  onClick={() => startTimer(currentCourse?.id, currentLesson?.שם)} 
+                  className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors"
+                >
+                  ▶️ התחל
+                </button>
+              ) : (
+                <button 
+                  onClick={pauseTimer} 
+                  className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 transition-colors"
+                >
+                  ⏸️ עצור
+                </button>
+              )}
+              <button 
+                onClick={resetTimer} 
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition-colors"
+              >
+                🔄 איפוס
+              </button>
+              {timerState === 'working' && (
+                <button 
+                  onClick={completeSession} 
+                  className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+                >
+                  ✅ סיים
+                </button>
+              )}
+            </div>
+          </div>
+          
+          {/* Progress Bar */}
+          <div className="mt-3 bg-gray-200 rounded-full h-2">
+            <div 
+              className="bg-blue-500 h-2 rounded-full transition-all duration-1000"
+              style={{
+                width: `${((timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) - timeLeft) / (timerState === 'working' ? WORK_TIME : timerState === 'break' ? SHORT_BREAK : WORK_TIME) * 100}%`
+              }}
+            />
+          </div>
+          
+          {/* Session Info */}
+          {currentSession.courseId && (
+            <div className="mt-2 text-sm text-gray-600">
+              🎓 לומד: {courses.find(c => c.id === currentSession.courseId)?.קורס} 
+              {currentSession.lessonName && ` - ${currentSession.lessonName}`}
+              {currentSession.topicTitle && ` - ${currentSession.topicTitle}`}
+            </div>
+          )}
+        </div>
+
         <div className="space-y-6">
           {currentLesson?.נושאים.map((topic: any, topicIndex: number) => (
             <div key={topicIndex} className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">📋 {topic.כותרת}</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">📋 {topic.כותרת}</h3>
+                <button 
+                  onClick={() => startTimer(currentCourse?.id, currentLesson?.שם, topic.כותרת)}
+                  className="text-xs bg-blue-100 hover:bg-blue-200 px-3 py-2 rounded-lg transition-colors flex items-center gap-1"
+                  disabled={isRunning}
+                  title={isRunning ? "טיימר כבר פועל" : "התחל פומודורו על הנושא הזה"}
+                >
+                  ⏱️ למד עכשיו
+                </button>
+              </div>
               
               <div className="space-y-2">
-                {topic.מטרות.map((goal: string, goalIndex: number) => {
-                  const isCompleted = topic.completedGoals?.includes(goal)
+                {topic.מטרות.map((goal: any, goalIndex: number) => {
+                  const normalizedGoal = normalizeGoal(goal)
+                  const goalText = normalizedGoal.text
+                  const goalNote = normalizedGoal.note
+                  const isCompleted = topic.completedGoals?.includes(goalText)
+                  const isEditingNote = editingGoalNote?.topicIndex === topicIndex && editingGoalNote?.goalText === goalText
+                  
                   return (
                     <div 
                       key={goalIndex}
-                      className={`flex items-start gap-3 p-3 rounded-lg transition-colors relative group ${
+                      className={`p-3 rounded-lg transition-colors relative group ${
                         isCompleted ? 'bg-green-50 border border-green-200' : 'bg-gray-50 hover:bg-gray-100'
                       }`}
                     >
-                      <span 
-                        className="text-lg cursor-pointer"
-                        onClick={() => toggleGoal(topicIndex, goal)}
-                      >
-                        {isCompleted ? '✅' : '⭕'}
-                      </span>
-                      <span 
-                        className={`text-sm flex-1 cursor-pointer ${isCompleted ? 'text-green-800 line-through' : 'text-gray-700'}`}
-                        onClick={() => toggleGoal(topicIndex, goal)}
-                      >
-                        {goal}
-                      </span>
-                      
-                      {/* כפתור מחיקת מטרה - מופיע בהובר */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (confirm('האם אתה בטוח שרוצה למחוק את המטרה הזו?')) {
-                            const updatedTopics = [...currentLesson.נושאים]
-                            updatedTopics[topicIndex].מטרות = updatedTopics[topicIndex].מטרות.filter((g: string) => g !== goal)
-                            updatedTopics[topicIndex].completedGoals = updatedTopics[topicIndex].completedGoals?.filter((g: string) => g !== goal) || []
-                            
-                            const updatedLesson = { ...currentLesson, נושאים: updatedTopics }
-                            setCurrentLesson(updatedLesson)
-                            
-                            const updatedCourses = courses.map(course => {
-                              if (course.id === currentCourse.id) {
-                                const updatedLessons = course.שיעורים.map((lesson: any) => 
-                                  lesson.שם === currentLesson.שם ? updatedLesson : lesson
-                                )
-                                return { ...course, שיעורים: updatedLessons }
+                      {/* שורה ראשית של המטרה */}
+                      <div className="flex items-start gap-3">
+                        <span 
+                          className="text-lg cursor-pointer"
+                          onClick={() => toggleGoal(topicIndex, goalText)}
+                        >
+                          {isCompleted ? '✅' : '⭕'}
+                        </span>
+                        <span 
+                          className={`text-sm flex-1 cursor-pointer ${isCompleted ? 'text-green-800 line-through' : 'text-gray-700'}`}
+                          onClick={() => toggleGoal(topicIndex, goalText)}
+                        >
+                          {goalText}
+                        </span>
+                        
+                        {/* כפתורים */}
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {/* כפתור הוספת/עריכת הערה */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (isEditingNote) {
+                                setEditingGoalNote(null)
+                                setTempNoteText('')
+                              } else {
+                                setEditingGoalNote({topicIndex, goalText})
+                                setTempNoteText(goalNote)
                               }
-                              return course
-                            })
-                            setCourses(updatedCourses)
-                            setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
-                          }
-                        }}
-                        className="opacity-0 group-hover:opacity-100 bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition-all"
-                        title="מחק מטרה"
-                      >
-                        🗑️
-                      </button>
+                            }}
+                            className="bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600 transition-colors"
+                            title={goalNote ? "ערוך הערה" : "הוסף הערה"}
+                          >
+                            📝
+                          </button>
+                          
+                          {/* כפתור מחיקת מטרה */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (confirm('האם אתה בטוח שרוצה למחוק את המטרה הזו?')) {
+                                const updatedTopics = [...currentLesson.נושאים]
+                                updatedTopics[topicIndex].מטרות = updatedTopics[topicIndex].מטרות.filter((g: any) => {
+                                  const normalizedG = normalizeGoal(g)
+                                  return normalizedG.text !== goalText
+                                })
+                                updatedTopics[topicIndex].completedGoals = updatedTopics[topicIndex].completedGoals?.filter((g: string) => g !== goalText) || []
+                                
+                                const updatedLesson = { ...currentLesson, נושאים: updatedTopics }
+                                setCurrentLesson(updatedLesson)
+                                
+                                const updatedCourses = courses.map(course => {
+                                  if (course.id === currentCourse.id) {
+                                    const updatedLessons = course.שיעורים.map((lesson: any) => 
+                                      lesson.שם === currentLesson.שם ? updatedLesson : lesson
+                                    )
+                                    return { ...course, שיעורים: updatedLessons }
+                                  }
+                                  return course
+                                })
+                                setCourses(updatedCourses)
+                                setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
+                              }
+                            }}
+                            className="bg-red-500 text-white text-xs px-2 py-1 rounded hover:bg-red-600 transition-colors"
+                            title="מחק מטרה"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* תצוגת הערה קיימת */}
+                      {goalNote && !isEditingNote && (
+                        <div className="mt-2 mr-6 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                          💡 {goalNote}
+                        </div>
+                      )}
+                      
+                      {/* עריכת הערה */}
+                      {isEditingNote && (
+                        <div className="mt-2 mr-6">
+                          <textarea
+                            value={tempNoteText}
+                            onChange={(e) => setTempNoteText(e.target.value)}
+                            placeholder="הוסף הערה למטרה זו..."
+                            className="w-full p-2 text-xs border border-gray-300 rounded resize-none"
+                            rows={2}
+                          />
+                          <div className="flex gap-2 mt-1">
+                            <button
+                              onClick={() => {
+                                updateGoalNote(topicIndex, goalText, tempNoteText)
+                                setEditingGoalNote(null)
+                                setTempNoteText('')
+                              }}
+                              className="bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600"
+                            >
+                              ✅ שמור
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingGoalNote(null)
+                                setTempNoteText('')
+                              }}
+                              className="bg-gray-400 text-white text-xs px-2 py-1 rounded hover:bg-gray-500"
+                            >
+                              ❌ ביטול
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
