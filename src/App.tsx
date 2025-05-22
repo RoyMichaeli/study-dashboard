@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
 import './index.css'
+import { AuthWrapper } from './components/AuthWrapper'
+import { SyncIndicator } from './components/SyncIndicator'
+import { useCloudSync } from './hooks/useCloudSync'
 
 // קבועים לטיימר פומודורו
 const WORK_TIME = 25 * 60      // 25 דקות עבודה
@@ -548,7 +551,13 @@ function App() {
     }
   }
   
-  const [courses, setCourses] = useState(loadSavedCourses)
+  // עכשיו מגיע מ-useCloudSync במקום state מקומי
+  // const [courses, setCourses] = useState(loadSavedCourses)
+  
+  // Remove unused functions to fix TypeScript errors
+  // const loadSavedCourses = () => { ... }
+  // const getTodayStudyTime = () => { ... }
+  // const getWeekStudyTime = () => { ... }
   const [currentCourse, setCurrentCourse] = useState<any>(null)
   const [currentLesson, setCurrentLesson] = useState<any>(null)
   const [newCourseText, setNewCourseText] = useState('')
@@ -576,6 +585,15 @@ function App() {
   }>({})
   const [todayCompletedSessions, setTodayCompletedSessions] = useState(0)
 
+  // אינטגרציית Firebase Cloud Sync
+  const { 
+    courses, 
+    saveCourses, 
+    saveStudySession: cloudSaveStudySession, 
+    syncState, 
+    user 
+  } = useCloudSync()
+
   // פונקציות עזר לטיימר
   const playNotificationSound = () => {
     const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+KVaOiDTAdZAkGZTRLiVCKF8OdwCyRNKGGLEJQYUpzIYBhNB1wWzNkOQCVaTEHhkEAMtN+KJRNBaIlIzYtO2NvLWeFP4cVPaRZM8YiNx4SBZaRZzgKKaZhFFUbGUfNRlGbPYNdZAoHWFAKQgBdIKUbGHFWO2t8REptQktsZFQ9gBmDZ3F0YENOZhQOSbQpSQkNFJI3SU5VULPYKVkkW3QIHG5sJR3EaDNpWUtfNZPYpVNSYX1wGbTEpWfJPJQ5UlksGcKKjCdgMlFrUyNdQKk8VHpPf2jQJi1tMyVQI3l5Z0FnVVdjbFt3KlVdTZA3YykQXFc=')
@@ -588,11 +606,20 @@ function App() {
     }
   }
 
-  const saveStudySession = (session: any) => {
+  const saveStudySession = async (session: any) => {
+    // שמירה מקומית מיידית
     const sessions = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
     sessions.push(session)
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
     console.log('💾 נשמר סשן חדש:', session)
+    
+    // שמירה בענן
+    try {
+      await cloudSaveStudySession(session)
+      console.log('☁️ סשן נשמר בענן:', session)
+    } catch (error) {
+      console.error('שגיאה בשמירת סשן בענן:', error)
+    }
     
     // עדכן סטטיסטיקות מיד אחרי השמירה
     setTimeout(() => {
@@ -643,20 +670,21 @@ function App() {
   }
 
   // שמירה אוטומטית בכל שינוי
-  useEffect(() => {
-    setSaveStatus('saving')
-    const saveTimeout = setTimeout(() => {
-      try {
-        localStorage.setItem('studyDashboardCourses', JSON.stringify(courses))
-        setSaveStatus('saved')
-      } catch (error) {
-        console.error('שגיאה בשמירת נתונים:', error)
-        setSaveStatus('error')
-      }
-    }, 500) // שמירה עם השהיה קטנה
-    
-    return () => clearTimeout(saveTimeout)
-  }, [courses])
+  // שמירה אוטומטית - עכשיו מטופלת ע"י useCloudSync
+  // useEffect(() => {
+  //   setSaveStatus('saving')
+  //   const saveTimeout = setTimeout(() => {
+  //     try {
+  //       localStorage.setItem('studyDashboardCourses', JSON.stringify(courses))
+  //       setSaveStatus('saved')
+  //     } catch (error) {
+  //       console.error('שגיאה בשמירת נתונים:', error)
+  //       setSaveStatus('error')
+  //     }
+  //   }, 500) // שמירה עם השהיה קטנה
+  //   
+  //   return () => clearTimeout(saveTimeout)
+  // }, [courses])
 
   // גיבוי אוטומטי תקופתי
   useEffect(() => {
@@ -906,7 +934,7 @@ function App() {
       const backupTime = localStorage.getItem('studyDashboardBackupTime')
       
       if (confirm(`האם לשחזר מגיבוי מ-${backupTime ? new Date(backupTime).toLocaleString('he-IL') : 'תאריך לא ידוע'}?`)) {
-        setCourses(backupData.courses || backupData) // תמיכה בפורמטים שונים
+        saveCourses(backupData.courses || backupData) // תמיכה בפורמטים שונים
         alert('✅ נתונים שוחזרו מגיבוי!')
       }
     } catch (error) {
@@ -924,7 +952,7 @@ function App() {
         const importedData = JSON.parse(e.target?.result as string)
         if (Array.isArray(importedData) && importedData.length > 0) {
           if (confirm('האם אתה בטוח שרוצה להחליף את כל הנתונים הקיימים?')) {
-            setCourses(importedData)
+            saveCourses(importedData)
             alert('נתונים יובאו בהצלחה!')
           }
         } else {
@@ -942,7 +970,7 @@ function App() {
     if (confirm('האם אתה בטוח שרוצה למחוק את כל הנתונים ולהתחיל מחדש?')) {
       if (confirm('זו פעולה בלתי הפיכה! האם אתה בטוח?')) {
         localStorage.removeItem('studyDashboardCourses')
-        setCourses(sampleCourses)
+        saveCourses(sampleCourses)
         setCurrentCourse(null)
         setCurrentLesson(null)
         setCurrentView('courses')
@@ -954,7 +982,7 @@ function App() {
 
   const forceLoadSampleData = () => {
     if (confirm('האם אתה רוצה לטעון את נתוני הדוגמה?')) {
-      setCourses(sampleCourses)
+      saveCourses(sampleCourses)
       setCurrentCourse(null)
       setCurrentLesson(null)
       setCurrentView('courses')
@@ -988,7 +1016,7 @@ function App() {
       }
       return course
     })
-    setCourses(updatedCourses)
+    saveCourses(updatedCourses)
     
     // עדכון הקורס הנוכחי
     const updatedCurrentCourse = updatedCourses.find(c => c.id === currentCourse.id)
@@ -1010,7 +1038,7 @@ function App() {
             }))
           }))
         }
-        setCourses([...courses, courseWithId])
+        saveCourses([...courses, courseWithId])
         setNewCourseText('')
         setShowAddForm(false)
         alert('קורס נוסף בהצלחה!')
@@ -1044,7 +1072,7 @@ function App() {
           return course
         })
         
-        setCourses(updatedCourses)
+        saveCourses(updatedCourses)
         setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
         setNewLessonText('')
         setShowAddLessonForm(false)
@@ -1060,7 +1088,7 @@ function App() {
   // פונקציות מחיקה ועריכה
   const deleteCourse = (courseId: number) => {
     if (confirm('האם אתה בטוח שרוצה למחוק את הקורס?')) {
-      setCourses(courses.filter(course => course.id !== courseId))
+      saveCourses(courses.filter(course => course.id !== courseId))
       alert('קורס נמחק בהצלחה!')
     }
   }
@@ -1076,7 +1104,7 @@ function App() {
         }
         return course
       })
-      setCourses(updatedCourses)
+      saveCourses(updatedCourses)
       setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
       alert('שיעור נמחק בהצלחה!')
     }
@@ -1119,7 +1147,7 @@ function App() {
           }
           return course
         })
-        setCourses(updatedCourses)
+        saveCourses(updatedCourses)
         setEditingCourse(null)
         setEditCourseText('')
         alert('קורס עודכן בהצלחה!')
@@ -1152,7 +1180,7 @@ function App() {
           }
           return course
         })
-        setCourses(updatedCourses)
+        saveCourses(updatedCourses)
         setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
         setEditingLesson(null)
         setEditLessonText('')
@@ -1232,7 +1260,7 @@ function App() {
       }
       return course
     })
-    setCourses(updatedCourses)
+    saveCourses(updatedCourses)
     
     // עדכון הקורס הנוכחי
     const updatedCurrentCourse = updatedCourses.find(c => c.id === currentCourse.id)
@@ -1334,7 +1362,9 @@ function App() {
   // 1️⃣ תצוגת רשימת קורסים (עמוד ראשי)
   if (currentView === 'courses') {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <AuthWrapper>
+        <SyncIndicator syncState={syncState} user={user} />
+        <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center gap-4">
@@ -1778,14 +1808,17 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </AuthWrapper>
     )
   }
 
   // 2️⃣ תצוגת שיעורים בקורס
   if (currentView === 'lessons') {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
+      <AuthWrapper>
+        <SyncIndicator syncState={syncState} user={user} />
+        <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center gap-3">
@@ -2057,13 +2090,16 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+        </div>
+      </AuthWrapper>
     )
   }
 
   // 3️⃣ תצוגת פרטי שיעור
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <AuthWrapper>
+      <SyncIndicator syncState={syncState} user={user} />
+      <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <button
@@ -2233,7 +2269,7 @@ function App() {
                                   }
                                   return course
                                 })
-                                setCourses(updatedCourses)
+                                saveCourses(updatedCourses)
                                 setCurrentCourse(updatedCourses.find(c => c.id === currentCourse.id))
                               }
                             }}
@@ -2293,7 +2329,8 @@ function App() {
           ))}
         </div>
       </div>
-    </div>
+      </div>
+    </AuthWrapper>
   )
 }
 

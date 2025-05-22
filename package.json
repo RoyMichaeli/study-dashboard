@@ -12,11 +12,13 @@
   "dependencies": {
     "@headlessui/react": "^2.2.4",
     "autoprefixer": "^10.4.18",
+    "firebase": "^11.8.1",
     "framer-motion": "^12.12.1",
     "lucide-react": "^0.511.0",
     "postcss": "^8.4.38",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "react-firebase-hooks": "^5.1.1",
     "recharts": "^2.15.3",
     "tailwindcss": "3.4.17",
     "zustand": "^5.0.5"
