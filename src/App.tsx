@@ -592,6 +592,12 @@ function App() {
     const sessions = JSON.parse(localStorage.getItem(SESSIONS_KEY) || '[]')
     sessions.push(session)
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions))
+    console.log('💾 נשמר סשן חדש:', session)
+    
+    // עדכן סטטיסטיקות מיד אחרי השמירה
+    setTimeout(() => {
+      updateTodayStats()
+    }, 100)
   }
 
   const getSessionsHistory = () => {
@@ -603,18 +609,36 @@ function App() {
     try {
       const sessions = getSessionsHistory()
       const today = new Date().toDateString()
-      const todaySessions = sessions.filter((session: any) => 
-        session.type === 'work' && 
-        session.completed && 
-        new Date(session.startTime).toDateString() === today
-      )
+      
+      console.log('📊 מעדכן סטטיסטיקות היום:', { 
+        totalSessions: sessions.length, 
+        today,
+        sessions: sessions.slice(-5) // הצגת 5 הסשנים האחרונים לדיבוג
+      })
+      
+      const todaySessions = sessions.filter((session: any) => {
+        if (!session.startTime) return false
+        const sessionDate = new Date(session.startTime).toDateString()
+        return session.type === 'work' && 
+               session.completed && 
+               sessionDate === today
+      })
+      
+      console.log('📊 סשנים של היום:', todaySessions)
+      
       setTodayCompletedSessions(todaySessions.length)
       
-      // חישוב זמן לימוד יומי
-      const totalTime = todaySessions.reduce((total: number, session: any) => total + session.duration, 0)
+      // חישוב זמן לימוד יומי (בשניות)
+      const totalTime = todaySessions.reduce((total: number, session: any) => {
+        const duration = session.duration || 0
+        return total + duration
+      }, 0)
+      
+      console.log('📊 זמן לימוד כולל:', { totalTimeSeconds: totalTime, totalTimeMinutes: Math.floor(totalTime / 60) })
+      
       setTodayStudyTime(totalTime)
     } catch (error) {
-      console.error('Error updating today sessions:', error)
+      console.error('❌ שגיאה בעדכון סטטיסטיקות היום:', error)
     }
   }
 
@@ -632,6 +656,32 @@ function App() {
     }, 500) // שמירה עם השהיה קטנה
     
     return () => clearTimeout(saveTimeout)
+  }, [courses])
+
+  // גיבוי אוטומטי תקופתי
+  useEffect(() => {
+    const autoBackup = setInterval(() => {
+      if (courses.length > 0) {
+        try {
+          const timestamp = new Date().toISOString()
+          const dataStr = JSON.stringify({
+            timestamp,
+            courses,
+            metadata: {
+              totalCourses: courses.length,
+              totalLessons: courses.reduce((sum, course) => sum + course.שיעורים.length, 0)
+            }
+          })
+          localStorage.setItem('studyDashboardLastBackup', dataStr)
+          localStorage.setItem('studyDashboardBackupTime', timestamp)
+          console.log('🔄 גיבוי אוטומטי בוצע בהצלחה')
+        } catch (error) {
+          console.error('❌ שגיאה בגיבוי אוטומטי:', error)
+        }
+      }
+    }, 10 * 60 * 1000) // גיבוי כל 10 דקות
+
+    return () => clearInterval(autoBackup)
   }, [courses])
 
   // useEffect לטיימר
@@ -749,12 +799,13 @@ function App() {
   // פונקציות ניהול נתונים
   const exportData = () => {
     try {
+      const timestamp = new Date().toISOString().split('T')[0]
       const dataStr = JSON.stringify(courses, null, 2)
       const dataBlob = new Blob([dataStr], { type: 'application/json' })
       const url = URL.createObjectURL(dataBlob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `study-dashboard-backup-${new Date().toISOString().split('T')[0]}.json`
+      link.download = `study-dashboard-backup-${timestamp}.json`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -762,6 +813,104 @@ function App() {
       alert('נתונים יוצאו בהצלחה!')
     } catch (error) {
       alert('שגיאה בייצוא הנתונים')
+    }
+  }
+
+  // גיבוי אוטומטי ל-GitHub Gist
+  const saveToGitHubGist = async () => {
+    const githubToken = localStorage.getItem('githubToken')
+    if (!githubToken) {
+      const token = prompt('הזן GitHub Personal Access Token (עם הרשאת gist):')
+      if (!token) return
+      localStorage.setItem('githubToken', token)
+    }
+
+    try {
+      const timestamp = new Date().toISOString()
+      const dataStr = JSON.stringify(courses, null, 2)
+      
+      const response = await fetch('https://api.github.com/gists', {
+        method: 'POST',
+        headers: {
+          'Authorization': `token ${githubToken || localStorage.getItem('githubToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          description: `Study Dashboard Backup - ${timestamp}`,
+          public: false,
+          files: {
+            [`study-dashboard-backup-${timestamp.split('T')[0]}.json`]: {
+              content: dataStr
+            }
+          }
+        })
+      })
+
+      if (response.ok) {
+        const gist = await response.json()
+        localStorage.setItem('lastGistUrl', gist.html_url)
+        alert(`✅ נתונים נשמרו ב-GitHub!\n🔗 ${gist.html_url}`)
+      } else {
+        throw new Error('Failed to create gist')
+      }
+    } catch (error) {
+      console.error('Error saving to GitHub:', error)
+      alert('❌ שגיאה בשמירה ל-GitHub. בדוק את ה-Token')
+    }
+  }
+
+  // גיבוי חכם לענן
+  const saveToCloud = () => {
+    try {
+      const timestamp = new Date().toISOString()
+      const dataStr = JSON.stringify({
+        timestamp,
+        courses,
+        metadata: {
+          totalCourses: courses.length,
+          totalLessons: courses.reduce((sum, course) => sum + course.שיעורים.length, 0),
+          version: '1.0'
+        }
+      }, null, 2)
+      
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `study-dashboard-cloud-backup-${timestamp.split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      // שמירה ב-localStorage כגיבוי נוסף
+      localStorage.setItem('studyDashboardLastBackup', dataStr)
+      localStorage.setItem('studyDashboardBackupTime', timestamp)
+      
+      alert('✅ גיבוי הושלם! הקובץ הורד ונשמר גם כגיבוי מקומי')
+    } catch (error) {
+      alert('❌ שגיאה ביצירת גיבוי')
+    }
+  }
+
+  // שחזור מגיבוי
+  const restoreFromBackup = () => {
+    const backup = localStorage.getItem('studyDashboardLastBackup')
+    if (!backup) {
+      alert('❌ לא נמצא גיבוי מקומי')
+      return
+    }
+
+    try {
+      const backupData = JSON.parse(backup)
+      const backupTime = localStorage.getItem('studyDashboardBackupTime')
+      
+      if (confirm(`האם לשחזר מגיבוי מ-${backupTime ? new Date(backupTime).toLocaleString('he-IL') : 'תאריך לא ידוע'}?`)) {
+        setCourses(backupData.courses || backupData) // תמיכה בפורמטים שונים
+        alert('✅ נתונים שוחזרו מגיבוי!')
+      }
+    } catch (error) {
+      alert('❌ שגיאה בשחזור מגיבוי')
     }
   }
 
@@ -1199,6 +1348,23 @@ function App() {
                 {saveStatus === 'saving' && '⏳ שומר...'}
                 {saveStatus === 'error' && '❌ שגיאה'}
               </div>
+              
+              {/* מחוון גיבוי אחרון */}
+              {(() => {
+                const lastBackupTime = localStorage.getItem('studyDashboardBackupTime')
+                if (lastBackupTime) {
+                  const timeDiff = Date.now() - new Date(lastBackupTime).getTime()
+                  const hoursAgo = Math.floor(timeDiff / (1000 * 60 * 60))
+                  const minutesAgo = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60))
+                  
+                  return (
+                    <div className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700" title={`גיבוי אחרון: ${new Date(lastBackupTime).toLocaleString('he-IL')}`}>
+                      ☁️ {hoursAgo > 0 ? `${hoursAgo}ש` : `${minutesAgo}ד`}
+                    </div>
+                  )
+                }
+                return null
+              })()}
             </div>
             
             <div className="flex gap-2">
@@ -1217,6 +1383,27 @@ function App() {
                     📥 ייצא נתונים
                   </button>
                   
+                  <button
+                    onClick={saveToCloud}
+                    className="w-full text-right px-4 py-2 hover:bg-green-100 text-green-700 transition-colors text-sm border-b border-gray-100"
+                  >
+                    ☁️ גיבוי חכם לענן
+                  </button>
+                  
+                  <button
+                    onClick={saveToGitHubGist}
+                    className="w-full text-right px-4 py-2 hover:bg-purple-100 text-purple-700 transition-colors text-sm border-b border-gray-100"
+                  >
+                    🐙 שמור ב-GitHub
+                  </button>
+                  
+                  <button
+                    onClick={restoreFromBackup}
+                    className="w-full text-right px-4 py-2 hover:bg-blue-100 text-blue-700 transition-colors text-sm border-b border-gray-100"
+                  >
+                    🔄 שחזר מגיבוי
+                  </button>
+                  
                   <label className="w-full text-right px-4 py-2 hover:bg-gray-100 transition-colors text-sm border-b border-gray-100 cursor-pointer block">
                     📤 ייבא נתונים
                     <input
@@ -1232,6 +1419,51 @@ function App() {
                     className="w-full text-right px-4 py-2 hover:bg-blue-100 text-blue-600 transition-colors text-sm border-b border-gray-100"
                   >
                     📚 טען נתוני דוגמה
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      console.log('🔄 רענון סטטיסטיקות ידני')
+                      updateTodayStats()
+                    }}
+                    className="w-full text-right px-4 py-2 hover:bg-blue-100 text-blue-600 transition-colors text-sm border-b border-gray-100"
+                  >
+                    🔄 רענן סטטיסטיקות
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      // יצירת סשן דוגמה לטסט
+                      const testSession = {
+                        id: Date.now().toString(),
+                        courseId: 1,
+                        lessonName: 'טסט',
+                        topicTitle: 'טסט נושא',
+                        startTime: new Date(),
+                        endTime: new Date(),
+                        duration: 1500, // 25 דקות
+                        type: 'work',
+                        completed: true
+                      }
+                      saveStudySession(testSession)
+                      alert('נוסף סשן טסט!')
+                    }}
+                    className="w-full text-right px-4 py-2 hover:bg-green-100 text-green-600 transition-colors text-sm border-b border-gray-100"
+                  >
+                    🧪 הוסף סשן טסט
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (confirm('האם למחוק את כל הסטטיסטיקות?')) {
+                        localStorage.removeItem(SESSIONS_KEY)
+                        updateTodayStats()
+                        alert('סטטיסטיקות נמחקו')
+                      }
+                    }}
+                    className="w-full text-right px-4 py-2 hover:bg-orange-100 text-orange-600 transition-colors text-sm border-b border-gray-100"
+                  >
+                    🗑️ נקה סטטיסטיקות
                   </button>
                   
                   <button
@@ -1362,6 +1594,15 @@ function App() {
                 />
               </div>
             </div>
+            
+            {/* Debug info - רק בפיתוח */}
+            {process.env.NODE_ENV === 'development' && (
+              <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                🔧 Debug: Sessions במחסן: {getSessionsHistory().length} | 
+                היום: {getSessionsHistory().filter(s => s.type === 'work' && s.completed && s.startTime && new Date(s.startTime).toDateString() === new Date().toDateString()).length} | 
+                עדכון אחרון: {new Date().toLocaleTimeString()}
+              </div>
+            )}
           </div>
 
           {/* טופס הוספת קורס */}
