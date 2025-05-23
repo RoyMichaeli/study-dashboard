@@ -160,6 +160,11 @@ export const useCloudSync = () => {
         const cloudSessions = await firebaseService.getAllStudySessions();
         
         // Set cloud data
+        console.log('☁️ Loaded from cloud:', cloudCourses.length, 'courses');
+        cloudCourses.forEach((course, i) => {
+          console.log(`Course ${i}: ${course.קורס} - ${course.שיעורים?.length || 0} lessons`);
+        });
+        
         setCourses(cloudCourses);
         setStudySessions(cloudSessions);
         
@@ -222,13 +227,25 @@ export const useCloudSync = () => {
   // Save functions with automatic retry
   const saveCourses = useCallback(async (newCourses: Course[]) => {
     try {
+      console.log('🔄 saveCourses called with:', newCourses.length, 'courses');
+      newCourses.forEach((course, index) => {
+        console.log(`Course ${index} before save:`, {
+          id: course.id,
+          name: course.קורס,
+          lessonsCount: course.שיעורים?.length || 0,
+          hasLessons: course.שיעורים !== undefined,
+          firstLesson: course.שיעורים?.[0]?.שם || 'No lessons'
+        });
+      });
+      
       if (isFirebaseConfigured && user) {
         setSyncState(prev => ({ ...prev, isSyncing: true }));
       }
       
-      // שמירה מקומית מיידית (תמיד)
-      setCourses(newCourses);
-      localStorage.setItem('studyDashboardCourses', JSON.stringify(newCourses));
+      // שמירה מקומית מיידית (תמיד) - עם deep copy
+      const coursesToSave = JSON.parse(JSON.stringify(newCourses)); // Deep copy
+      setCourses(coursesToSave);
+      localStorage.setItem('studyDashboardCourses', JSON.stringify(coursesToSave));
       
       // Update local timestamps for conflict resolution
       newCourses.forEach(course => {

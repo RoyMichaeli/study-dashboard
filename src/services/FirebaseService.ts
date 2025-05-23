@@ -73,7 +73,7 @@ export class FirebaseService {
         ...course,
         updatedAt: serverTimestamp(),
         syncedAt: serverTimestamp()
-      }, { merge: true });
+      });
     } catch (error) {
       // Add to sync queue for retry
       this.addToSyncQueue('update', 'courses', course);
@@ -85,6 +85,17 @@ export class FirebaseService {
     if (!isFirebaseConfigured || !db) throw new Error('Firebase not configured');
     if (!this.userId) throw new Error('User not authenticated');
     
+    // Debug logging
+    console.log('📤 Saving courses to Firebase:', courses.length);
+    courses.forEach((course, index) => {
+      console.log(`Course ${index}:`, {
+        id: course.id,
+        name: course.קורס,
+        lessonsCount: course.שיעורים?.length || 0,
+        firstLesson: course.שיעורים?.[0]?.שם || 'No lessons'
+      });
+    });
+    
     // Validate all courses
     courses.forEach(course => this.validateCourse(course));
     
@@ -93,16 +104,20 @@ export class FirebaseService {
     
     courses.forEach(course => {
       const courseRef = doc(db!, `users/${this.userId}/courses`, course.id.toString());
-      batch.set(courseRef, {
+      const dataToSave = {
         ...course,
         updatedAt: serverTimestamp(),
         syncedAt: serverTimestamp()
-      }, { merge: true });
+      };
+      console.log(`💾 Saving course ${course.id} with lessons:`, dataToSave.שיעורים?.length || 0);
+      batch.set(courseRef, dataToSave);
     });
     
     try {
       await batch.commit();
+      console.log('✅ Batch commit successful');
     } catch (error) {
+      console.error('❌ Batch commit failed:', error);
       // Add all courses to sync queue
       courses.forEach(course => {
         this.addToSyncQueue('update', 'courses', course);
@@ -118,9 +133,21 @@ export class FirebaseService {
     const coursesRef = collection(db!, `users/${this.userId}/courses`);
     const snapshot = await getDocs(coursesRef);
     
-    return snapshot.docs.map(doc => ({
-      ...doc.data() as Course
-    }));
+    console.log('📥 Retrieved courses from Firebase:', snapshot.docs.length);
+    
+    const courses = snapshot.docs.map(doc => {
+      const data = doc.data();
+      console.log(`Course ${doc.id}:`, {
+        hasLessons: data.שיעורים !== undefined,
+        lessonsCount: data.שיעורים?.length || 0,
+        dataKeys: Object.keys(data)
+      });
+      return {
+        ...data as Course
+      };
+    });
+    
+    return courses;
   }
 
   // Real-time listener לסנכרון אוטומטי with conflict resolution
@@ -132,22 +159,32 @@ export class FirebaseService {
     const q = query(coursesRef, orderBy('id'));
     
     const unsubscribe = onSnapshot(q, async (snapshot) => {
+      console.log('🔔 Real-time update received, processing', snapshot.docs.length, 'courses');
       const courses: Course[] = [];
       
       for (const doc of snapshot.docs) {
         const cloudData = doc.data() as Course & { updatedAt?: any };
+        console.log(`📋 Processing course ${doc.id}:`, {
+          hasLessons: cloudData.שיעורים !== undefined,
+          lessonsCount: cloudData.שיעורים?.length || 0,
+          dataKeys: Object.keys(cloudData)
+        });
+        
         const localData = this.getLocalCourse(cloudData.id);
         
         // Conflict resolution based on timestamps
         if (localData && this.shouldUseLocalData(localData, cloudData)) {
           // Local data is newer, push to cloud
+          console.log(`⬆️ Local data newer for course ${cloudData.id}, pushing to cloud`);
           await this.saveCourse(localData);
           courses.push(localData);
         } else {
+          console.log(`⬇️ Using cloud data for course ${cloudData.id}`);
           courses.push(cloudData);
         }
       }
       
+      console.log('📊 Final courses to callback:', courses.length);
       callback(courses);
     }, (error) => {
       console.error('Error syncing courses:', error);

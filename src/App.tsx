@@ -4,6 +4,7 @@ import { AuthWrapper } from './components/AuthWrapper'
 // import { SyncIndicator } from './components/SyncIndicator' // Replaced with SyncStatus
 import { SyncStatus } from './components/SyncStatus'
 import { useCloudSync } from './hooks/useCloudSync'
+import { debugFirebaseData } from './utils/debugFirebase'
 
 // קבועים לטיימר פומודורו
 const WORK_TIME = 25 * 60      // 25 דקות עבודה
@@ -1342,6 +1343,15 @@ function App() {
           <div className="flex justify-between items-center mb-8">
             <div className="flex items-center gap-4">
               <h1 className="text-3xl font-bold text-gray-800">🎓 דשבורד לימודים</h1>
+              {/* Debug button - remove in production */}
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={() => debugFirebaseData()}
+                  className="px-2 py-1 bg-red-500 text-white text-xs rounded"
+                >
+                  Debug Firebase
+                </button>
+              )}
               <div className={`text-sm px-3 py-1 rounded-full ${
                 saveStatus === 'saved' ? 'text-green-700 bg-green-100' :
                 saveStatus === 'saving' ? 'text-yellow-700 bg-yellow-100' :
