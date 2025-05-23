@@ -7,6 +7,8 @@ import { auth, isFirebaseConfigured } from '../config/firebase';
 export const useCloudSync = () => {
   const [user] = isFirebaseConfigured && auth ? useAuthState(auth) : [null];
   const [courses, setCourses] = useState<Course[]>([]);
+  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
+  const [syncQueueStatus, setSyncQueueStatus] = useState<{ pending: number; items: any[] }>({ pending: 0, items: [] });
   
   // Load initial data from localStorage
   useEffect(() => {
@@ -98,6 +100,21 @@ export const useCloudSync = () => {
     error: isFirebaseConfigured ? null : 'Firebase לא מוגדר - עובד במצב מקומי',
     isOffline: !navigator.onLine
   });
+  
+  // Update sync queue status periodically
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    
+    const updateQueueStatus = () => {
+      const status = firebaseService.getSyncQueueStatus();
+      setSyncQueueStatus(status);
+    };
+    
+    updateQueueStatus();
+    const interval = setInterval(updateQueueStatus, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Monitor online/offline status
   useEffect(() => {
@@ -131,9 +148,13 @@ export const useCloudSync = () => {
     // Migrate local data to cloud on first login
     firebaseService.migrateFromLocalStorage().catch(console.error);
 
-    // Subscribe to real-time updates
-    const unsubscribe = firebaseService.subscribeToCourses((cloudCourses) => {
+    // Subscribe to real-time updates for courses
+    const unsubscribeCourses = firebaseService.subscribeToCourses((cloudCourses) => {
       setCourses(cloudCourses);
+      // Update local storage timestamps for conflict resolution
+      cloudCourses.forEach(course => {
+        localStorage.setItem(`lastUpdate_courses_${course.id}`, new Date().toISOString());
+      });
       setSyncState(prev => ({
         ...prev,
         isSyncing: false,
@@ -141,9 +162,20 @@ export const useCloudSync = () => {
         error: null
       }));
     });
+    
+    // Subscribe to real-time updates for study sessions
+    const unsubscribeSessions = firebaseService.subscribeToStudySessions((cloudSessions) => {
+      setStudySessions(cloudSessions);
+      // Update local storage
+      localStorage.setItem('studyDashboardSessions', JSON.stringify(cloudSessions));
+      cloudSessions.forEach(session => {
+        localStorage.setItem(`lastUpdate_studySessions_${session.id}`, new Date().toISOString());
+      });
+    });
 
     return () => {
-      unsubscribe();
+      unsubscribeCourses();
+      unsubscribeSessions();
       firebaseService.cleanup();
     };
   }, [user]);
@@ -158,6 +190,11 @@ export const useCloudSync = () => {
       // שמירה מקומית מיידית (תמיד)
       setCourses(newCourses);
       localStorage.setItem('studyDashboardCourses', JSON.stringify(newCourses));
+      
+      // Update local timestamps for conflict resolution
+      newCourses.forEach(course => {
+        localStorage.setItem(`lastUpdate_courses_${course.id}`, new Date().toISOString());
+      });
       
       // שמירה בענן רק אם Firebase מוגדר ומחובר
       if (isFirebaseConfigured && user) {
@@ -175,45 +212,38 @@ export const useCloudSync = () => {
         setSyncState(prev => ({
           ...prev,
           isSyncing: false,
-          error: 'Failed to sync. Data saved locally.'
+          error: 'Failed to sync. Data saved locally and queued for retry.'
         }));
-        
-        // Retry after 5 seconds if online
-        if (navigator.onLine) {
-          setTimeout(() => saveCourses(newCourses), 5000);
-        }
       }
     }
   }, [user]);
 
   const saveStudySession = useCallback(async (session: StudySession) => {
     try {
+      // Ensure session has an ID
+      if (!session.id) {
+        session.id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+      
       // Always save to localStorage first
       const sessions = JSON.parse(localStorage.getItem('studyDashboardSessions') || '[]');
       sessions.push(session);
       localStorage.setItem('studyDashboardSessions', JSON.stringify(sessions));
+      localStorage.setItem(`lastUpdate_studySessions_${session.id}`, new Date().toISOString());
+      
+      // Update local state
+      setStudySessions(prev => [...prev, session]);
 
       // Save to cloud if Firebase is configured and authenticated
       if (isFirebaseConfigured && user) {
         await firebaseService.saveStudySession(session);
-      } else if (isFirebaseConfigured) {
-        // Store in pending queue for later sync only if Firebase is configured
-        const pendingSessions = JSON.parse(
-          localStorage.getItem('pendingSessions') || '[]'
-        );
-        pendingSessions.push(session);
-        localStorage.setItem('pendingSessions', JSON.stringify(pendingSessions));
       }
     } catch (error) {
       console.error('Failed to save session:', error);
-      if (isFirebaseConfigured) {
-        // Store in localStorage for later sync only if Firebase is configured
-        const pendingSessions = JSON.parse(
-          localStorage.getItem('pendingSessions') || '[]'
-        );
-        pendingSessions.push(session);
-        localStorage.setItem('pendingSessions', JSON.stringify(pendingSessions));
-      }
+      setSyncState(prev => ({
+        ...prev,
+        error: 'Failed to sync session. It will be retried automatically.'
+      }));
     }
   }, [user]);
 
@@ -245,12 +275,95 @@ export const useCloudSync = () => {
     }
   }, [user, syncPendingData]);
 
+  // Delete functions
+  const deleteCourse = useCallback(async (courseId: number) => {
+    try {
+      // Remove from local state and storage
+      const updatedCourses = courses.filter(c => c.id !== courseId);
+      setCourses(updatedCourses);
+      localStorage.setItem('studyDashboardCourses', JSON.stringify(updatedCourses));
+      
+      // Delete from cloud
+      if (isFirebaseConfigured && user) {
+        await firebaseService.deleteCourse(courseId);
+      }
+    } catch (error) {
+      console.error('Failed to delete course:', error);
+      setSyncState(prev => ({
+        ...prev,
+        error: 'Failed to delete course. It will be retried automatically.'
+      }));
+    }
+  }, [courses, user]);
+  
+  const deleteStudySession = useCallback(async (sessionId: string) => {
+    try {
+      // Remove from local state and storage
+      const updatedSessions = studySessions.filter(s => s.id !== sessionId);
+      setStudySessions(updatedSessions);
+      localStorage.setItem('studyDashboardSessions', JSON.stringify(updatedSessions));
+      
+      // Delete from cloud
+      if (isFirebaseConfigured && user) {
+        await firebaseService.deleteStudySession(sessionId);
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      setSyncState(prev => ({
+        ...prev,
+        error: 'Failed to delete session. It will be retried automatically.'
+      }));
+    }
+  }, [studySessions, user]);
+  
+  // Manual sync trigger
+  const forceSync = useCallback(async () => {
+    if (!isFirebaseConfigured || !user) {
+      setSyncState(prev => ({
+        ...prev,
+        error: 'Cannot sync: Not logged in or Firebase not configured'
+      }));
+      return;
+    }
+    
+    try {
+      setSyncState(prev => ({ ...prev, isSyncing: true, error: null }));
+      await firebaseService.forceSync();
+      
+      // Reload data from cloud
+      const cloudCourses = await firebaseService.getCourses();
+      const cloudSessions = await firebaseService.getAllStudySessions();
+      
+      setCourses(cloudCourses);
+      setStudySessions(cloudSessions);
+      
+      setSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        lastSync: new Date(),
+        error: null
+      }));
+    } catch (error) {
+      console.error('Manual sync failed:', error);
+      setSyncState(prev => ({
+        ...prev,
+        isSyncing: false,
+        error: 'Manual sync failed. Please try again.'
+      }));
+    }
+  }, [user]);
+  
   return {
     courses,
+    studySessions,
     saveCourses,
     saveStudySession,
+    deleteCourse,
+    deleteStudySession,
     syncState,
     syncPendingData,
+    syncQueueStatus,
+    forceSync,
     user
   };
 };

@@ -1,6 +1,6 @@
 import { CheckCircle, Circle, Edit3, Save, X } from 'lucide-react'
 import { useState } from 'react'
-import { StudyTopic } from '../store/useStore'
+import type { StudyTopic } from '../store/useStore'
 
 interface TopicViewProps {
   topic: StudyTopic
@@ -9,7 +9,7 @@ interface TopicViewProps {
   onAddNote: (note: string) => void
 }
 
-export const TopicView = ({ topic, courseId, onToggleGoal, onAddNote }: TopicViewProps) => {
+export const TopicView = ({ topic, onToggleGoal, onAddNote }: TopicViewProps) => {
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [noteText, setNoteText] = useState(topic.notes || '')
   

@@ -1,5 +1,5 @@
 import { BookOpen, Calendar, Target, TrendingUp } from 'lucide-react'
-import { StudyCourse } from '../store/useStore'
+import type { StudyCourse } from '../store/useStore'
 
 interface CourseCardProps {
   course: StudyCourse

@@ -1,4 +1,4 @@
-import { StudyCourse } from '../store/useStore'
+import type { StudyCourse } from '../store/useStore'
 
 export const sampleCourses: StudyCourse[] = [
   {

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import './index.css'
 import { AuthWrapper } from './components/AuthWrapper'
-import { SyncIndicator } from './components/SyncIndicator'
+// import { SyncIndicator } from './components/SyncIndicator' // Replaced with SyncStatus
+import { SyncStatus } from './components/SyncStatus'
 import { useCloudSync } from './hooks/useCloudSync'
 
 // קבועים לטיימר פומודורו
@@ -532,24 +533,7 @@ function App() {
   const [currentView, setCurrentView] = useState<'courses' | 'lessons' | 'lesson-detail'>('courses')
   
   // טוען נתונים שמורים או נתוני דוגמה
-  const loadSavedCourses = () => {
-    try {
-      const saved = localStorage.getItem('studyDashboardCourses')
-      if (saved && saved !== 'undefined' && saved !== 'null') {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed
-        }
-      }
-      // אם אין נתונים שמורים או שהם ריקים, החזר נתוני דוגמה
-      return sampleCourses
-    } catch (error) {
-      console.error('שגיאה בטעינת נתונים:', error)
-      // במקרה של שגיאה, נקה את הstorage ונחזיר נתוני דוגמה
-      localStorage.removeItem('studyDashboardCourses')
-      return sampleCourses
-    }
-  }
+  // This function has been moved to useCloudSync hook
   
   // עכשיו מגיע מ-useCloudSync במקום state מקומי
   // const [courses, setCourses] = useState(loadSavedCourses)
@@ -589,8 +573,12 @@ function App() {
   const { 
     courses, 
     saveCourses, 
-    saveStudySession: cloudSaveStudySession, 
-    syncState, 
+    saveStudySession: cloudSaveStudySession,
+    // deleteCourse: cloudDeleteCourse,
+    // deleteStudySession: cloudDeleteStudySession,
+    syncState,
+    syncQueueStatus,
+    forceSync,
     user 
   } = useCloudSync()
 
@@ -1271,29 +1259,9 @@ function App() {
   const [todayStudyTime, setTodayStudyTime] = useState(0)
 
   // פונקציות נוספות לטיימר
-  const getTodayStudyTime = () => {
-    const sessions = getSessionsHistory()
-    const today = new Date().toDateString()
-    return sessions
-      .filter((session: any) => 
-        session.type === 'work' && 
-        session.completed && 
-        new Date(session.startTime).toDateString() === today
-      )
-      .reduce((total: number, session: any) => total + session.duration, 0)
-  }
+  // Study time calculation functions removed - can be restored if needed
 
-  const getWeekStudyTime = () => {
-    const sessions = getSessionsHistory()
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    return sessions
-      .filter((session: any) => 
-        session.type === 'work' && 
-        session.completed && 
-        new Date(session.startTime) >= weekAgo
-      )
-      .reduce((total: number, session: any) => total + session.duration, 0)
-  }
+  // Week study stats function removed - inline calculation used instead
 
   const startTimer = (courseId?: number, lessonName?: string, topicTitle?: string) => {
     if (timerState === 'idle') {
@@ -1363,7 +1331,12 @@ function App() {
   if (currentView === 'courses') {
     return (
       <AuthWrapper>
-        <SyncIndicator syncState={syncState} user={user} />
+        <SyncStatus 
+          syncState={syncState} 
+          syncQueueStatus={syncQueueStatus}
+          onForceSync={forceSync}
+          userName={user?.displayName || user?.email}
+        />
         <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-8">
@@ -1629,7 +1602,7 @@ function App() {
             {process.env.NODE_ENV === 'development' && (
               <div className="mt-2 text-xs text-blue-600 bg-blue-50 p-2 rounded">
                 🔧 Debug: Sessions במחסן: {getSessionsHistory().length} | 
-                היום: {getSessionsHistory().filter(s => s.type === 'work' && s.completed && s.startTime && new Date(s.startTime).toDateString() === new Date().toDateString()).length} | 
+                היום: {getSessionsHistory().filter((s: any) => s.type === 'work' && s.completed && s.startTime && new Date(s.startTime).toDateString() === new Date().toDateString()).length} | 
                 עדכון אחרון: {new Date().toLocaleTimeString()}
               </div>
             )}
@@ -1817,7 +1790,12 @@ function App() {
   if (currentView === 'lessons') {
     return (
       <AuthWrapper>
-        <SyncIndicator syncState={syncState} user={user} />
+        <SyncStatus 
+          syncState={syncState} 
+          syncQueueStatus={syncQueueStatus}
+          onForceSync={forceSync}
+          userName={user?.displayName || user?.email}
+        />
         <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
@@ -2098,7 +2076,12 @@ function App() {
   // 3️⃣ תצוגת פרטי שיעור
   return (
     <AuthWrapper>
-      <SyncIndicator syncState={syncState} user={user} />
+      <SyncStatus 
+        syncState={syncState} 
+        syncQueueStatus={syncQueueStatus}
+        onForceSync={forceSync}
+        userName={user?.displayName || user?.email}
+      />
       <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">

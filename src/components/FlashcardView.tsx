@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, RotateCcw, Eye, EyeOff } from 'lucide-react'
-import { StudyTopic } from '../store/useStore'
+import type { StudyTopic } from '../store/useStore'
 
 interface FlashcardViewProps {
   topics: StudyTopic[]

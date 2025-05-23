@@ -1,5 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { StudyCourse } from '../store/useStore'
+import type { StudyCourse } from '../store/useStore'
 
 interface ProgressChartProps {
   courses: StudyCourse[]
@@ -43,7 +43,7 @@ export const ProgressChart = ({ courses }: ProgressChartProps) => {
             />
             <YAxis domain={[0, 100]} />
             <Tooltip 
-              formatter={(value, name) => [`${value}%`, 'התקדמות']}
+              formatter={(value) => [`${value}%`, 'התקדמות']}
               labelFormatter={(label) => `קורס: ${label}`}
             />
             <Bar dataKey="progress" fill="#3b82f6" radius={[4, 4, 0, 0]} />
