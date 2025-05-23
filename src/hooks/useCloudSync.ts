@@ -171,8 +171,30 @@ export const useCloudSync = () => {
     // First, load existing data from cloud
     const loadInitialData = async () => {
       try {
-        const cloudCourses = await firebaseService.getCourses();
-        const cloudSessions = await firebaseService.getAllStudySessions();
+        console.log('🔄 Loading initial data from cloud...');
+        
+        // Add retry logic for Safari
+        let retries = 0;
+        let cloudCourses: Course[] = [];
+        let cloudSessions: StudySession[] = [];
+        
+        while (retries < 3) {
+          try {
+            cloudCourses = await firebaseService.getCourses();
+            cloudSessions = await firebaseService.getAllStudySessions();
+            break; // Success, exit retry loop
+          } catch (error: any) {
+            retries++;
+            console.warn(`⚠️ Retry ${retries}/3 - Error loading data:`, error.message);
+            
+            // Safari sometimes needs a delay between retries
+            if (retries < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+            } else {
+              throw error; // Final retry failed
+            }
+          }
+        }
         
         // Migrate cloud data if needed
         const migratedCourses = migrateCorruptedData(cloudCourses);

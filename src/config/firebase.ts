@@ -2,9 +2,14 @@ import { initializeApp } from 'firebase/app';
 import { 
   initializeFirestore,
   persistentLocalCache,
-  persistentMultipleTabManager
+  persistentMultipleTabManager,
+  persistentSingleTabManager
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { setupBrowserCompatibility } from '../utils/browserCompatibility';
+
+// Setup browser compatibility fixes
+setupBrowserCompatibility();
 
 // Check if Firebase config is available
 const firebaseConfig = {
@@ -25,12 +30,27 @@ if (isFirebaseConfigured) {
   app = initializeApp(firebaseConfig);
 }
 
-// Initialize Firestore with multi-tab support
+// Detect Safari
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+// Initialize Firestore with browser-specific configuration
 export const db = isFirebaseConfigured ? initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
+  localCache: isSafari 
+    ? persistentLocalCache({
+        // Safari has issues with multi-tab, use single tab manager
+        tabManager: persistentSingleTabManager({
+          forceOwnership: false
+        })
+      })
+    : persistentLocalCache({
+        // Other browsers can use multi-tab
+        tabManager: persistentMultipleTabManager()
+      })
 }) : null;
+
+if (isSafari && isFirebaseConfigured) {
+  console.log('🦁 Safari detected - using single-tab persistence mode');
+}
 
 export const auth = isFirebaseConfigured ? getAuth(app) : null;
 

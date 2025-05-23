@@ -5,6 +5,8 @@ import { AuthWrapper } from './components/AuthWrapper'
 import { SyncStatus } from './components/SyncStatus'
 import { useCloudSync } from './hooks/useCloudSync'
 import { debugFirebaseData } from './utils/debugFirebase'
+import './utils/syncDiagnostics' // Load diagnostics commands
+import './utils/manualSyncBridge' // Load sync bridge commands
 
 // קבועים לטיימר פומודורו
 const WORK_TIME = 25 * 60      // 25 דקות עבודה
