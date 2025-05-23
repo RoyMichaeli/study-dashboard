@@ -3,6 +3,7 @@ import { firebaseService } from '../services/FirebaseService';
 import type { Course, StudySession, SyncState } from '../types';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, isFirebaseConfigured } from '../config/firebase';
+import { migrateCorruptedData, validateDataIntegrity } from '../utils/dataIntegrity';
 
 export const useCloudSync = () => {
   const [user] = isFirebaseConfigured && auth ? useAuthState(auth) : [null];
@@ -22,7 +23,21 @@ export const useCloudSync = () => {
       try {
         const parsed = JSON.parse(localCourses);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setCourses(parsed);
+          // Migrate corrupted data if needed
+          const migrated = migrateCorruptedData(parsed);
+          const validation = validateDataIntegrity(migrated);
+          
+          if (!validation.valid) {
+            console.warn('⚠️ Data integrity issues found:', validation.errors);
+          }
+          
+          setCourses(migrated);
+          
+          // Update localStorage with migrated data if changed
+          if (migrated.length !== parsed.length || JSON.stringify(migrated) !== JSON.stringify(parsed)) {
+            console.log('💾 Saving migrated data to localStorage');
+            localStorage.setItem('studyDashboardCourses', JSON.stringify(migrated));
+          }
           return;
         }
       } catch (error) {
@@ -159,17 +174,33 @@ export const useCloudSync = () => {
         const cloudCourses = await firebaseService.getCourses();
         const cloudSessions = await firebaseService.getAllStudySessions();
         
-        // Set cloud data
+        // Migrate cloud data if needed
+        const migratedCourses = migrateCorruptedData(cloudCourses);
+        const validation = validateDataIntegrity(migratedCourses);
+        
         console.log('☁️ Loaded from cloud:', cloudCourses.length, 'courses');
-        cloudCourses.forEach((course, i) => {
+        console.log('📊 After migration:', migratedCourses.length, 'courses');
+        
+        if (!validation.valid) {
+          console.warn('⚠️ Cloud data integrity issues:', validation.errors);
+        }
+        
+        migratedCourses.forEach((course, i) => {
           console.log(`Course ${i}: ${course.קורס} - ${course.שיעורים?.length || 0} lessons`);
         });
         
-        setCourses(cloudCourses);
+        setCourses(migratedCourses);
         setStudySessions(cloudSessions);
         
-        // Update local storage with cloud data
-        localStorage.setItem('studyDashboardCourses', JSON.stringify(cloudCourses));
+        // If data was migrated, save it back to Firebase
+        if (migratedCourses.length !== cloudCourses.length || 
+            JSON.stringify(migratedCourses) !== JSON.stringify(cloudCourses)) {
+          console.log('🔄 Saving migrated data back to Firebase');
+          firebaseService.saveAllCourses(migratedCourses).catch(console.error);
+        }
+        
+        // Update local storage with migrated data
+        localStorage.setItem('studyDashboardCourses', JSON.stringify(migratedCourses));
         localStorage.setItem('studyDashboardSessions', JSON.stringify(cloudSessions));
         
         setSyncState(prev => ({
@@ -192,11 +223,19 @@ export const useCloudSync = () => {
     
     // Then subscribe to real-time updates for courses
     const unsubscribeCourses = firebaseService.subscribeToCourses((cloudCourses) => {
-      setCourses(cloudCourses);
-      // Update local storage with cloud data
-      localStorage.setItem('studyDashboardCourses', JSON.stringify(cloudCourses));
+      // Migrate data if needed
+      const migratedCourses = migrateCorruptedData(cloudCourses);
+      const validation = validateDataIntegrity(migratedCourses);
+      
+      if (!validation.valid) {
+        console.warn('⚠️ Real-time data integrity issues:', validation.errors);
+      }
+      
+      setCourses(migratedCourses);
+      // Update local storage with migrated data
+      localStorage.setItem('studyDashboardCourses', JSON.stringify(migratedCourses));
       // Update local storage timestamps for conflict resolution
-      cloudCourses.forEach(course => {
+      migratedCourses.forEach(course => {
         localStorage.setItem(`lastUpdate_courses_${course.id}`, new Date().toISOString());
       });
       setSyncState(prev => ({
@@ -227,8 +266,19 @@ export const useCloudSync = () => {
   // Save functions with automatic retry
   const saveCourses = useCallback(async (newCourses: Course[]) => {
     try {
+      // Validate and migrate data before saving
+      const migratedCourses = migrateCorruptedData(newCourses);
+      const validation = validateDataIntegrity(migratedCourses);
+      
       console.log('🔄 saveCourses called with:', newCourses.length, 'courses');
-      newCourses.forEach((course, index) => {
+      console.log('📊 After migration/validation:', migratedCourses.length, 'courses');
+      
+      if (!validation.valid) {
+        console.error('❌ Data integrity validation failed:', validation.errors);
+        // Still save but log the issues
+      }
+      
+      migratedCourses.forEach((course, index) => {
         console.log(`Course ${index} before save:`, {
           id: course.id,
           name: course.קורס,
@@ -243,18 +293,18 @@ export const useCloudSync = () => {
       }
       
       // שמירה מקומית מיידית (תמיד) - עם deep copy
-      const coursesToSave = JSON.parse(JSON.stringify(newCourses)); // Deep copy
+      const coursesToSave = JSON.parse(JSON.stringify(migratedCourses)); // Deep copy of migrated data
       setCourses(coursesToSave);
       localStorage.setItem('studyDashboardCourses', JSON.stringify(coursesToSave));
       
       // Update local timestamps for conflict resolution
-      newCourses.forEach(course => {
+      migratedCourses.forEach(course => {
         localStorage.setItem(`lastUpdate_courses_${course.id}`, new Date().toISOString());
       });
       
       // שמירה בענן רק אם Firebase מוגדר ומחובר
       if (isFirebaseConfigured && user) {
-        await firebaseService.saveAllCourses(newCourses);
+        await firebaseService.saveAllCourses(migratedCourses);
         setSyncState(prev => ({
           ...prev,
           isSyncing: false,
