@@ -10,8 +10,13 @@ export const useCloudSync = () => {
   const [studySessions, setStudySessions] = useState<StudySession[]>([]);
   const [syncQueueStatus, setSyncQueueStatus] = useState<{ pending: number; items: any[] }>({ pending: 0, items: [] });
   
-  // Load initial data from localStorage
+  // Load initial data from localStorage only if not authenticated
   useEffect(() => {
+    // If user is authenticated, data will be loaded from Firebase
+    if (isFirebaseConfigured && user) {
+      return;
+    }
+    
     const localCourses = localStorage.getItem('studyDashboardCourses');
     if (localCourses) {
       try {
@@ -27,7 +32,7 @@ export const useCloudSync = () => {
     
     // Load sample courses if no valid data found
     loadSampleCourses();
-  }, []);
+  }, [user]);
 
   const loadSampleCourses = () => {
     // נתונים לדוגמה מה-App.tsx המקורי
@@ -148,9 +153,43 @@ export const useCloudSync = () => {
     // Migrate local data to cloud on first login
     firebaseService.migrateFromLocalStorage().catch(console.error);
 
-    // Subscribe to real-time updates for courses
+    // First, load existing data from cloud
+    const loadInitialData = async () => {
+      try {
+        const cloudCourses = await firebaseService.getCourses();
+        const cloudSessions = await firebaseService.getAllStudySessions();
+        
+        // Set cloud data
+        setCourses(cloudCourses);
+        setStudySessions(cloudSessions);
+        
+        // Update local storage with cloud data
+        localStorage.setItem('studyDashboardCourses', JSON.stringify(cloudCourses));
+        localStorage.setItem('studyDashboardSessions', JSON.stringify(cloudSessions));
+        
+        setSyncState(prev => ({
+          ...prev,
+          isSyncing: false,
+          lastSync: new Date(),
+          error: null
+        }));
+      } catch (error) {
+        console.error('Failed to load initial data from cloud:', error);
+        setSyncState(prev => ({
+          ...prev,
+          isSyncing: false,
+          error: 'Failed to load data from cloud'
+        }));
+      }
+    };
+    
+    loadInitialData();
+    
+    // Then subscribe to real-time updates for courses
     const unsubscribeCourses = firebaseService.subscribeToCourses((cloudCourses) => {
       setCourses(cloudCourses);
+      // Update local storage with cloud data
+      localStorage.setItem('studyDashboardCourses', JSON.stringify(cloudCourses));
       // Update local storage timestamps for conflict resolution
       cloudCourses.forEach(course => {
         localStorage.setItem(`lastUpdate_courses_${course.id}`, new Date().toISOString());
