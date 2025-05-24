@@ -3,10 +3,23 @@ import './index.css'
 import { AuthWrapper } from './components/AuthWrapper'
 // import { SyncIndicator } from './components/SyncIndicator' // Replaced with SyncStatus
 import { SyncStatus } from './components/SyncStatus'
-import { useCloudSync } from './hooks/useCloudSync'
+import { EnhancedSyncStatus } from './components/EnhancedSyncStatus'
+import { FirebaseFirstNotification } from './components/FirebaseFirstNotification'
+import { useCloudSync } from './hooks/useAdaptiveCloudSync' // Now uses adaptive version
 import { debugFirebaseData } from './utils/debugFirebase'
 import './utils/syncDiagnostics' // Load diagnostics commands
 import './utils/manualSyncBridge' // Load sync bridge commands
+import './utils/firebaseFirstMode' // Load Firebase-first mode commands
+import './utils/masterDiagnostics' // Load master diagnostics for data loss debugging
+import './utils/dataBackupManager' // Load backup manager for data protection
+import './utils/immediateBackup' // Run immediate backup and protection
+import './utils/firebaseQuotaFix' // Fix for Firebase quota issues
+import './utils/localFirstSync' // Local-first sync mode
+import './utils/manualSyncConfig' // Manual sync configuration
+import './utils/activateManualSync' // Auto-activate manual sync
+import { ManualSyncButton } from './components/ManualSyncButton'
+import { useManualSync } from './hooks/useManualSync'
+import { featureFlags } from './utils/featureFlags' // Feature flags
 
 // קבועים לטיימר פומודורו
 const WORK_TIME = 25 * 60      // 25 דקות עבודה
@@ -534,6 +547,36 @@ const sampleCourses = [
 
 function App() {
   const [currentView, setCurrentView] = useState<'courses' | 'lessons' | 'lesson-detail'>('courses')
+  const [showFirebaseFirstModal, setShowFirebaseFirstModal] = useState(false)
+  
+  // Initialize Firebase-first mode on app start
+  useEffect(() => {
+    // Check if localStorage quota is exceeded and enable Firebase-first mode
+    const checkAndEnableFirebaseFirst = async () => {
+      // Import Firebase-first utilities
+      const { FirebaseFirstMode } = await import('./utils/firebaseFirstMode');
+      
+      // Check if user has seen the notification
+      const hasSeenNotification = localStorage.getItem('firebaseFirstNotificationSeen')
+      
+      // Check storage quota status
+      if (!FirebaseFirstMode.checkQuotaStatus()) {
+        console.log('🚨 localStorage quota exceeded - enabling Firebase-first mode');
+        FirebaseFirstMode.enableFirebaseFirst();
+        if (!hasSeenNotification) {
+          setShowFirebaseFirstModal(true)
+        }
+      } else {
+        console.log('🔥 Enabling Firebase-first mode - Firebase is single source of truth');
+        FirebaseFirstMode.enableFirebaseFirst();
+        if (!hasSeenNotification) {
+          setShowFirebaseFirstModal(true)
+        }
+      }
+    };
+    
+    checkAndEnableFirebaseFirst();
+  }, []);
   
   // טוען נתונים שמורים או נתוני דוגמה
   // This function has been moved to useCloudSync hook
@@ -575,15 +618,23 @@ function App() {
   // אינטגרציית Firebase Cloud Sync
   const { 
     courses, 
-    saveCourses, 
+    saveCourses: cloudSaveCourses, 
     saveStudySession: cloudSaveStudySession,
     // deleteCourse: cloudDeleteCourse,
     // deleteStudySession: cloudDeleteStudySession,
     syncState,
     syncQueueStatus,
     forceSync,
-    user 
-  } = useCloudSync()
+    user,
+    getSyncMetadata
+  } = useCloudSync() as any // Type assertion for enhanced features
+  
+  // אינטגרציית סנכרון ידני
+  const { saveLocalOnly, markLocalChange } = useManualSync()
+  
+  // בחירת פונקציית שמירה לפי מצב הסנכרון
+  const isManualSyncMode = localStorage.getItem('syncMode') === 'manual'
+  const saveCourses = isManualSyncMode ? saveLocalOnly : cloudSaveCourses
 
   // פונקציות עזר לטיימר
   const playNotificationSound = () => {
@@ -688,7 +739,7 @@ function App() {
             courses,
             metadata: {
               totalCourses: courses.length,
-              totalLessons: courses.reduce((sum, course) => sum + course.שיעורים.length, 0)
+              totalLessons: courses.reduce((sum: number, course: any) => sum + course.שיעורים.length, 0)
             }
           })
           localStorage.setItem('studyDashboardLastBackup', dataStr)
@@ -887,7 +938,7 @@ function App() {
         courses,
         metadata: {
           totalCourses: courses.length,
-          totalLessons: courses.reduce((sum, course) => sum + course.שיעורים.length, 0),
+          totalLessons: courses.reduce((sum: number, course: any) => sum + course.שיעורים.length, 0),
           version: '1.0'
         }
       }, null, 2)
@@ -1260,6 +1311,22 @@ function App() {
 
   // משתנה state לזמן לימוד יומי
   const [todayStudyTime, setTodayStudyTime] = useState(0)
+  
+  // Helper function to render appropriate sync status
+  const renderSyncStatus = () => {
+    const isEnhanced = featureFlags.isEnabled('enhancedFirebaseSync')
+    const Component = isEnhanced ? EnhancedSyncStatus : SyncStatus
+    
+    return (
+      <Component
+        syncState={syncState}
+        syncQueueStatus={syncQueueStatus}
+        onForceSync={forceSync}
+        userName={user?.displayName || user?.email}
+        getSyncMetadata={getSyncMetadata}
+      />
+    )
+  }
 
   // פונקציות נוספות לטיימר
   // Study time calculation functions removed - can be restored if needed
@@ -1334,12 +1401,12 @@ function App() {
   if (currentView === 'courses') {
     return (
       <AuthWrapper>
-        <SyncStatus 
-          syncState={syncState} 
-          syncQueueStatus={syncQueueStatus}
-          onForceSync={forceSync}
-          userName={user?.displayName || user?.email}
-        />
+        {showFirebaseFirstModal && (
+          <FirebaseFirstNotification
+            onConfirm={() => setShowFirebaseFirstModal(false)}
+          />
+        )}
+        {renderSyncStatus()}
         <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex justify-between items-center mb-8">
@@ -1383,6 +1450,9 @@ function App() {
             </div>
             
             <div className="flex gap-2">
+              {/* כפתור סנכרון ידני */}
+              <ManualSyncButton />
+              
               {/* כפתורי ניהול נתונים */}
               <div className="relative group">
                 <button className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm">
@@ -1672,7 +1742,7 @@ function App() {
 
           {/* רשימת קורסים */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course) => {
+            {courses.map((course: any) => {
               const progress = getCourseProgress(course)
               const totalLessons = course.שיעורים.length
               
@@ -1802,12 +1872,12 @@ function App() {
   if (currentView === 'lessons') {
     return (
       <AuthWrapper>
-        <SyncStatus 
-          syncState={syncState} 
-          syncQueueStatus={syncQueueStatus}
-          onForceSync={forceSync}
-          userName={user?.displayName || user?.email}
-        />
+        {showFirebaseFirstModal && (
+          <FirebaseFirstNotification
+            onConfirm={() => setShowFirebaseFirstModal(false)}
+          />
+        )}
+        {renderSyncStatus()}
         <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-8">
@@ -2088,12 +2158,12 @@ function App() {
   // 3️⃣ תצוגת פרטי שיעור
   return (
     <AuthWrapper>
-      <SyncStatus 
-        syncState={syncState} 
-        syncQueueStatus={syncQueueStatus}
-        onForceSync={forceSync}
-        userName={user?.displayName || user?.email}
-      />
+      {showFirebaseFirstModal && (
+        <FirebaseFirstNotification
+          onConfirm={() => setShowFirebaseFirstModal(false)}
+        />
+      )}
+      {renderSyncStatus()}
       <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center gap-3 mb-6">

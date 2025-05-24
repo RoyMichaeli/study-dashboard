@@ -1,9 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { 
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-  persistentSingleTabManager
+  initializeFirestore
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { setupBrowserCompatibility } from '../utils/browserCompatibility';
@@ -33,19 +30,11 @@ if (isFirebaseConfigured) {
 // Detect Safari
 const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
-// Initialize Firestore with browser-specific configuration
+// Initialize Firestore with memory-only cache for Firebase-first mode
 export const db = isFirebaseConfigured ? initializeFirestore(app, {
-  localCache: isSafari 
-    ? persistentLocalCache({
-        // Safari has issues with multi-tab, use single tab manager
-        tabManager: persistentSingleTabManager({
-          forceOwnership: false
-        })
-      })
-    : persistentLocalCache({
-        // Other browsers can use multi-tab
-        tabManager: persistentMultipleTabManager()
-      })
+  // Use memory cache only to avoid localStorage quota issues
+  // Firebase will be the single source of truth
+  experimentalForceLongPolling: false, // Use WebSocket for real-time updates
 }) : null;
 
 if (isSafari && isFirebaseConfigured) {

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emergency Storage Fix</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+        pre { background: #000; padding: 10px; border: 1px solid #0f0; overflow: auto; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #333; color: #0f0; border: 1px solid #0f0; }
+        button:hover { background: #0f0; color: #000; }
+        .error { color: #f00; }
+        .warning { color: #ff0; }
+        .success { color: #0f0; }
+        .critical { background: #f00; color: #000; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚨 Emergency Storage Fix</h1>
+    
+    <div class="critical">
+        <strong>CRITICAL:</strong> Your localStorage is full! This is preventing sync operations.
+    </div>
+    
+    <div>
+        <h2>Storage Analysis:</h2>
+        <pre id="storage-analysis"></pre>
+    </div>
+    
+    <div>
+        <h2>Quick Actions:</h2>
+        <button onclick="analyzeStorage()">Analyze Storage Usage</button>
+        <button onclick="cleanFirebaseCache()">Clean Firebase Cache</button>
+        <button onclick="cleanOldData()">Clean Old Data</button>
+        <button onclick="emergencyCleanup()">EMERGENCY CLEANUP (Keeps only courses)</button>
+    </div>
+    
+    <div>
+        <h2>Console Output:</h2>
+        <pre id="output"></pre>
+    </div>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, type = '') {
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type ? ` class="${type}"` : '';
+            output.innerHTML += `<span${className}>[${timestamp}] ${message}</span>\n`;
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function analyzeStorage() {
+            const analysis = document.getElementById('storage-analysis');
+            let totalSize = 0;
+            const items = [];
+            
+            // Analyze each localStorage item
+            Object.keys(localStorage).forEach(key => {
+                const value = localStorage.getItem(key) || '';
+                const size = new Blob([value]).size;
+                totalSize += size;
+                items.push({ key, size, value });
+            });
+            
+            // Sort by size
+            items.sort((a, b) => b.size - a.size);
+            
+            let html = `Total localStorage usage: ${formatBytes(totalSize)}\n\n`;
+            html += 'Top storage consumers:\n';
+            
+            items.forEach((item, i) => {
+                if (i < 10 || item.key.includes('firebase') || item.key.includes('courses')) {
+                    html += `${item.key}: ${formatBytes(item.size)}\n`;
+                    
+                    // Show preview for large items
+                    if (item.size > 10000) {
+                        const preview = item.value.substring(0, 100);
+                        html += `  Preview: ${preview}...\n`;
+                    }
+                }
+            });
+            
+            analysis.textContent = html;
+            log(`Analysis complete. Total size: ${formatBytes(totalSize)}`, 'success');
+        }
+        
+        function cleanFirebaseCache() {
+            log('Cleaning Firebase cache...', 'warning');
+            let cleaned = 0;
+            let freedSpace = 0;
+            
+            const keysToRemove = [];
+            Object.keys(localStorage).forEach(key => {
+                // Remove Firebase persistence data (except critical data)
+                if (key.includes('firestore') && !key.includes('mutations')) {
+                    keysToRemove.push(key);
+                }
+                
+                // Remove old IndexedDB references
+                if (key.includes('firebase:previous')) {
+                    keysToRemove.push(key);
+                }
+            });
+            
+            keysToRemove.forEach(key => {
+                const size = new Blob([localStorage.getItem(key) || '']).size;
+                localStorage.removeItem(key);
+                cleaned++;
+                freedSpace += size;
+                log(`Removed: ${key} (${formatBytes(size)})`, 'success');
+            });
+            
+            log(`✅ Cleaned ${cleaned} items, freed ${formatBytes(freedSpace)}`, 'success');
+            analyzeStorage();
+        }
+        
+        function cleanOldData() {
+            log('Cleaning old/redundant data...', 'warning');
+            let cleaned = 0;
+            let freedSpace = 0;
+            
+            const keysToRemove = [];
+            Object.keys(localStorage).forEach(key => {
+                // Remove old timestamps
+                if (key.startsWith('lastUpdate_') && !key.includes('courses')) {
+                    keysToRemove.push(key);
+                }
+                
+                // Remove old sync data
+                if (key.includes('_backup') || key.includes('_old')) {
+                    keysToRemove.push(key);
+                }
+                
+                // Check sync queue size
+                if (key === 'firebaseSyncQueue') {
+                    try {
+                        const queue = JSON.parse(localStorage.getItem(key) || '[]');
+                        if (queue.length > 100) {
+                            // Keep only recent 50 items
+                            const trimmed = queue.slice(-50);
+                            localStorage.setItem(key, JSON.stringify(trimmed));
+                            log(`Trimmed sync queue from ${queue.length} to 50 items`, 'success');
+                        }
+                    } catch (e) {
+                        log(`Error processing sync queue: ${e.message}`, 'error');
+                    }
+                }
+            });
+            
+            keysToRemove.forEach(key => {
+                const size = new Blob([localStorage.getItem(key) || '']).size;
+                localStorage.removeItem(key);
+                cleaned++;
+                freedSpace += size;
+            });
+            
+            log(`✅ Cleaned ${cleaned} items, freed ${formatBytes(freedSpace)}`, 'success');
+            analyzeStorage();
+        }
+        
+        function emergencyCleanup() {
+            if (!confirm('⚠️ EMERGENCY CLEANUP will remove everything except courses and sessions. Continue?')) {
+                return;
+            }
+            
+            log('🚨 Starting emergency cleanup...', 'error');
+            
+            // Save critical data
+            const courses = localStorage.getItem('studyDashboardCourses');
+            const sessions = localStorage.getItem('studyDashboardSessions');
+            const featureFlags = localStorage.getItem('featureFlags');
+            
+            // Count items before
+            const itemsBefore = Object.keys(localStorage).length;
+            
+            // Clear everything
+            localStorage.clear();
+            
+            // Restore critical data
+            if (courses) localStorage.setItem('studyDashboardCourses', courses);
+            if (sessions) localStorage.setItem('studyDashboardSessions', sessions);
+            if (featureFlags) localStorage.setItem('featureFlags', featureFlags);
+            
+            const itemsAfter = Object.keys(localStorage).length;
+            log(`✅ Emergency cleanup complete. Reduced from ${itemsBefore} to ${itemsAfter} items`, 'success');
+            
+            // Clear IndexedDB as well
+            if ('indexedDB' in window) {
+                indexedDB.databases().then(databases => {
+                    databases.forEach(db => {
+                        if (db.name && db.name.includes('firestore')) {
+                            indexedDB.deleteDatabase(db.name);
+                            log(`Deleted IndexedDB: ${db.name}`, 'success');
+                        }
+                    });
+                });
+            }
+            
+            log('⚠️ Please refresh the app to reinitialize Firebase', 'warning');
+            analyzeStorage();
+        }
+        
+        // Auto-analyze on load
+        window.onload = () => {
+            analyzeStorage();
+            
+            // Check if quota exceeded
+            try {
+                localStorage.setItem('test', 'test');
+                localStorage.removeItem('test');
+            } catch (e) {
+                log('❌ localStorage quota exceeded!', 'error');
+                log('Run "Clean Firebase Cache" or "EMERGENCY CLEANUP" to fix', 'warning');
+            }
+        };
+    </script>
+</body>
+</html>

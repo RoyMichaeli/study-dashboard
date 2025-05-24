@@ -292,6 +292,82 @@ export class SyncDiagnostics {
     
     console.log('✅ Local data cleared');
   }
+  
+  static analyzeStorageUsage(): void {
+    console.log('\n💾 Storage Usage Analysis:');
+    
+    let totalSize = 0;
+    const items: { key: string; size: number }[] = [];
+    
+    // Analyze each localStorage item
+    Object.keys(localStorage).forEach(key => {
+      const value = localStorage.getItem(key) || '';
+      const size = new Blob([value]).size;
+      totalSize += size;
+      items.push({ key, size });
+    });
+    
+    // Sort by size
+    items.sort((a, b) => b.size - a.size);
+    
+    console.log(`Total localStorage usage: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
+    console.log('\nTop 10 storage consumers:');
+    
+    items.slice(0, 10).forEach((item, i) => {
+      const sizeKB = (item.size / 1024).toFixed(2);
+      console.log(`${i + 1}. ${item.key}: ${sizeKB} KB`);
+    });
+    
+    // Check quota
+    try {
+      localStorage.setItem('__quota_test__', 'test');
+      localStorage.removeItem('__quota_test__');
+      console.log('\n✅ Storage quota OK');
+    } catch (e) {
+      console.error('\n❌ STORAGE QUOTA EXCEEDED!');
+      console.log('Run syncDiag.cleanupStorage() to free space');
+    }
+  }
+  
+  static cleanupStorage(): void {
+    console.log('🧹 Starting storage cleanup...');
+    
+    let cleaned = 0;
+    let freedSpace = 0;
+    
+    // Clean Firebase cache (non-critical data)
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('firestore') && !key.includes('mutations')) {
+        const size = new Blob([localStorage.getItem(key) || '']).size;
+        localStorage.removeItem(key);
+        cleaned++;
+        freedSpace += size;
+      }
+      
+      // Remove old timestamps
+      if (key.startsWith('lastUpdate_') && Date.now() - parseInt(localStorage.getItem(key) || '0') > 86400000) {
+        localStorage.removeItem(key);
+        cleaned++;
+      }
+    });
+    
+    // Trim sync queue
+    const syncQueue = localStorage.getItem('firebaseSyncQueue');
+    if (syncQueue) {
+      try {
+        const queue = JSON.parse(syncQueue);
+        if (queue.length > 50) {
+          const trimmed = queue.slice(-50);
+          localStorage.setItem('firebaseSyncQueue', JSON.stringify(trimmed));
+          console.log(`Trimmed sync queue from ${queue.length} to 50 items`);
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    console.log(`✅ Cleaned ${cleaned} items, freed ${(freedSpace / 1024).toFixed(2)} KB`);
+  }
 }
 
 // Console commands
@@ -300,6 +376,8 @@ export class SyncDiagnostics {
   upload: () => SyncDiagnostics.forceUploadToFirebase(),
   download: () => SyncDiagnostics.forceDownloadFromFirebase(),
   clear: () => SyncDiagnostics.clearAllData(),
+  storage: () => SyncDiagnostics.analyzeStorageUsage(),
+  cleanupStorage: () => SyncDiagnostics.cleanupStorage(),
   
   // Quick status
   status: async () => {
@@ -309,14 +387,53 @@ export class SyncDiagnostics {
     console.log(`   Local courses: ${localCount}`);
     console.log(`   Authenticated: ${auth?.currentUser ? '✅' : '❌'}`);
     console.log(`   Online: ${navigator.onLine ? '✅' : '❌'}`);
+    
+    // Check storage quota
+    try {
+      localStorage.setItem('__test__', 'test');
+      localStorage.removeItem('__test__');
+    } catch (e) {
+      console.error('   ❌ STORAGE QUOTA EXCEEDED!');
+    }
+  },
+  
+  // Emergency fix for sync loops
+  fixLoop: async () => {
+    console.log('🚨 EMERGENCY: Fixing sync loop...');
+    try {
+      // Import firebase service
+      const { firebaseService } = await import('../services/FirebaseService');
+      
+      // Clean up embedded sessions
+      await firebaseService.cleanupEmbeddedSessions();
+      
+      console.log('✅ Sync loop fix completed. Please refresh the page.');
+    } catch (error) {
+      console.error('❌ Failed to fix sync loop:', error);
+      console.log('Try running this command after logging in.');
+    }
   }
 };
 
 console.log(`
+🔥 FIREBASE-FIRST MODE ENABLED! 🔥
+Firebase is now the single source of truth!
+
 🔧 Sync Diagnostics Commands Available:
-   syncDiag.run()      - Run full diagnostics
-   syncDiag.status()   - Quick status check
-   syncDiag.upload()   - Force upload local → Firebase
-   syncDiag.download() - Force download Firebase → local
-   syncDiag.clear()    - Clear all local data
+   syncDiag.run()           - Run full diagnostics
+   syncDiag.status()        - Quick status check
+   syncDiag.storage()       - Analyze storage usage
+   syncDiag.cleanupStorage()- Clean up storage space
+   syncDiag.upload()        - Force upload local → Firebase
+   syncDiag.download()      - Force download Firebase → local
+   syncDiag.clear()         - Clear all local data
+   
+🔥 FIREBASE-FIRST COMMANDS:
+   firebaseFirst.enable()   - Enable Firebase-first mode
+   firebaseFirst.stats()    - Show storage statistics
+   firebaseFirst.checkQuota() - Check storage quota
+   
+🚨 EMERGENCY FIXES:
+   syncDiag.fixLoop()       - Fix infinite sync loop
+   syncDiag.cleanupStorage()- Fix quota exceeded error
 `);
