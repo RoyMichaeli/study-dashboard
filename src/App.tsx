@@ -17,7 +17,10 @@ import './utils/firebaseQuotaFix' // Fix for Firebase quota issues
 import './utils/localFirstSync' // Local-first sync mode
 import './utils/manualSyncConfig' // Manual sync configuration
 import './utils/activateManualSync' // Auto-activate manual sync
+import './utils/claudeIntegration' // Claude AI integration
+import './utils/claudeExamples' // Claude examples and templates
 import { ManualSyncButton } from './components/ManualSyncButton'
+import { ClaudeButton } from './components/ClaudeButton'
 import { useManualSync } from './hooks/useManualSync'
 import { featureFlags } from './utils/featureFlags' // Feature flags
 
